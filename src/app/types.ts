@@ -39,3 +39,18 @@ export interface BusinessSettings {
   customCosts: CustomCost[];
   reinvestmentPercentage: number;
 }
+
+export interface AccountEntry {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number
+}
+
+// สำหรับระบบบัญชี (งบทดลอง)
+export interface AccountEntry {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+}
