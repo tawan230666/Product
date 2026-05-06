@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { Button, Card, CardContent } from '@mui/material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Download, TrendingUp, Award, Calendar as CalendarIcon, BarChart3, PieChart as PieChartIcon, Utensils, Wallet } from 'lucide-react';
+import { Download, TrendingUp, TrendingDown, Award, BarChart3, PieChart as PieChartIcon, Utensils, Wallet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -12,15 +12,90 @@ const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4'
 export const ReportPage: React.FC = () => {
   const { dailySales, menuItems, partners, employees, settings } = useBusiness();
 
+  const calculateEmployeeDailyCost = () => {
+    return employees.reduce((total, emp) => {
+      if (emp.paymentType === 'daily') return total + emp.salary;
+      if (emp.paymentType === 'monthly') return total + emp.salary / 30;
+      if (emp.paymentType === 'yearly') return total + emp.salary / 365;
+      return total;
+    }, 0);
+  };
+
+  const getTotalCustomCosts = () => {
+    return settings.customCosts.reduce((sum, cost) => sum + cost.amount, 0);
+  };
+
+  // 1. คำนวณสรุปผลกำไร
+  const profitSummary = useMemo(() => {
+    let totalPosSales = 0;
+    let totalOtherIncomes = 0;
+    let totalDailyExpenses = 0;
+
+    dailySales.forEach((sale) => {
+      totalPosSales += sale.sales || 0;
+      totalOtherIncomes += (sale.incomes || []).reduce((sum, inc) => sum + inc.amount, 0);
+      totalDailyExpenses += (sale.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+    });
+
+    const totalRevenue = totalPosSales + totalOtherIncomes;
+    
+    const activeDays = dailySales.length > 0 ? dailySales.length : 1;
+    const fixedCosts = (getTotalCustomCosts() + calculateEmployeeDailyCost()) * activeDays;
+    const totalCosts = fixedCosts + totalDailyExpenses;
+
+    const netProfit = totalRevenue - totalCosts; 
+    const reinvestAmount = netProfit > 0 ? netProfit * (settings.reinvestmentPercentage / 100) : 0;
+    const distributableProfit = netProfit > 0 ? netProfit - reinvestAmount : 0;
+
+    const partnerShares = partners.map((p) => ({
+      name: p.name,
+      value: distributableProfit * (p.percentage / 100),
+      percentage: p.percentage,
+    }));
+
+    return {
+      totalRevenue,
+      totalCosts,
+      netProfit,
+      reinvestAmount,
+      distributableProfit,
+      partnerShares,
+    };
+  }, [dailySales, settings, partners, employees]);
+
+  // 2. ข้อมูลกราฟเปรียบเทียบ รายรับ-รายจ่าย (แก้ไขเพิ่มรายจ่ายลงกราฟ)
   const salesChartData = useMemo(() => {
+    const dailyFixedCost = getTotalCustomCosts() + calculateEmployeeDailyCost();
+
     return dailySales
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((sale) => ({
-        date: format(parseISO(sale.date), 'dd MMM', { locale: th }),
-        sales: sale.sales,
-      }));
+      .map((sale) => {
+        const dailyRevenue = sale.sales + (sale.incomes || []).reduce((sum, inc) => sum + inc.amount, 0);
+        const dailyOtherExpense = (sale.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+        const dailyTotalExpense = dailyFixedCost + dailyOtherExpense;
+
+        return {
+          date: format(parseISO(sale.date), 'dd MMM', { locale: th }),
+          revenue: dailyRevenue,
+          expense: dailyTotalExpense,
+        };
+      });
+  }, [dailySales, settings.customCosts, employees]);
+
+  // 3. หาวันที่ขายดีที่สุด
+  const topSalesDay = useMemo(() => {
+    if (dailySales.length === 0) return null;
+    let bestDay = { date: '', revenue: 0 };
+    dailySales.forEach(sale => {
+      const rev = sale.sales + (sale.incomes || []).reduce((sum, i) => sum + i.amount, 0);
+      if (rev > bestDay.revenue) {
+        bestDay = { date: sale.date, revenue: rev };
+      }
+    });
+    return bestDay.date ? bestDay : null;
   }, [dailySales]);
 
+  // 4. เมนูขายดี
   const topMenuItems = useMemo(() => {
     const menuSalesCount: { [menuId: string]: number } = {};
     dailySales.forEach((sale) => {
@@ -42,75 +117,40 @@ export const ReportPage: React.FC = () => {
       .slice(0, 5);
   }, [dailySales, menuItems]);
 
-  const topSalesDay = useMemo(() => {
-    if (dailySales.length === 0) return null;
-    return dailySales.reduce((max, sale) => (sale.sales > max.sales ? sale : max));
-  }, [dailySales]);
-
-  const totalRevenue = dailySales.reduce((sum, sale) => sum + sale.sales, 0);
-  const averageDaily = dailySales.length > 0 ? totalRevenue / dailySales.length : 0;
-
-  const calculateEmployeeDailyCost = () => {
-    return employees.reduce((total, emp) => {
-      if (emp.paymentType === 'daily') return total + emp.salary;
-      if (emp.paymentType === 'monthly') return total + emp.salary / 30;
-      if (emp.paymentType === 'yearly') return total + emp.salary / 365;
-      return total;
-    }, 0);
-  };
-
-  const getTotalCustomCosts = () => {
-    return settings.customCosts.reduce((sum, cost) => sum + cost.amount, 0);
-  };
-
-  const profitSummary = useMemo(() => {
-    const totalSales = dailySales.reduce((sum, sale) => sum + sale.sales, 0);
-    const dailyCosts = getTotalCustomCosts() + calculateEmployeeDailyCost();
-    const totalCosts = dailyCosts * dailySales.length;
-    const grossProfit = totalSales - totalCosts;
-    const reinvestAmount = grossProfit * (settings.reinvestmentPercentage / 100);
-    const netProfit = grossProfit - reinvestAmount;
-
-    const partnerShares = partners.map((p) => ({
-      name: p.name,
-      value: netProfit * (p.percentage / 100),
-      percentage: p.percentage,
-    }));
-
-    return {
-      totalSales,
-      totalCosts,
-      grossProfit,
-      reinvestAmount,
-      netProfit,
-      partnerShares,
-    };
-  }, [dailySales, settings, partners, employees]);
-
   const handleDownloadExcel = () => {
     const salesDetailData = dailySales.map((sale) => {
-      const dailyCost = getTotalCustomCosts() + calculateEmployeeDailyCost();
-      const profit = sale.sales - dailyCost;
-      const reinvest = profit * (settings.reinvestmentPercentage / 100);
-      const netProfit = profit - reinvest;
+      const dailyOtherIncome = (sale.incomes || []).reduce((sum, inc) => sum + inc.amount, 0);
+      const dailyOtherExpense = (sale.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+      const dailyRevenue = sale.sales + dailyOtherIncome;
+      
+      const dailyFixedCost = getTotalCustomCosts() + calculateEmployeeDailyCost();
+      const dailyTotalCost = dailyFixedCost + dailyOtherExpense;
+      
+      const profit = dailyRevenue - dailyTotalCost;
+      const reinvest = profit > 0 ? profit * (settings.reinvestmentPercentage / 100) : 0;
+      const netProfitForDividend = profit > 0 ? profit - reinvest : 0;
 
       return {
         'วันที่': format(parseISO(sale.date), 'dd/MM/yyyy', { locale: th }),
-        'ยอดขาย (บาท)': sale.sales,
-        'ต้นทุน (บาท)': dailyCost,
-        'กำไรขั้นต้น (บาท)': profit,
+        'ยอดขายหน้าร้าน (บาท)': sale.sales,
+        'รายรับอื่นๆ (บาท)': dailyOtherIncome,
+        'รายรับรวม (บาท)': dailyRevenue,
+        'รายจ่ายอื่นๆ (บาท)': dailyOtherExpense,
+        'ต้นทุนคงที่ (บาท)': dailyFixedCost,
+        'รวมรายจ่าย (บาท)': dailyTotalCost,
+        'กำไรสุทธิ (บาท)': profit,
         'เก็บลงทุนต่อ (บาท)': reinvest,
-        'กำไรสุทธิ (บาท)': netProfit,
-        'สถานะ': netProfit > 0 ? 'กำไร' : netProfit < 0 ? 'ขาดทุน' : 'เท่าทุน',
+        'ปันผลหุ้นส่วน (บาท)': netProfitForDividend,
+        'สถานะ': profit > 0 ? 'กำไร' : profit < 0 ? 'ขาดทุน' : 'เท่าทุน',
       };
     });
 
     const summaryData = [
-      { 'รายการ': 'ยอดขายรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalSales },
-      { 'รายการ': 'ต้นทุนรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalCosts },
-      { 'รายการ': 'กำไรขั้นต้น', 'จำนวน (บาท)': profitSummary.grossProfit },
-      { 'รายการ': `เก็บลงทุนต่อ (${settings.reinvestmentPercentage}%)`, 'จำนวน (บาท)': profitSummary.reinvestAmount },
+      { 'รายการ': 'รายรับรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalRevenue },
+      { 'รายการ': 'รายจ่ายรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalCosts },
       { 'รายการ': 'กำไรสุทธิ', 'จำนวน (บาท)': profitSummary.netProfit },
+      { 'รายการ': `เก็บลงทุนต่อ (${settings.reinvestmentPercentage}%)`, 'จำนวน (บาท)': profitSummary.reinvestAmount },
+      { 'รายการ': 'ยอดแบ่งปันผลหุ้นส่วน', 'จำนวน (บาท)': profitSummary.distributableProfit },
       { 'รายการ': 'สถานะ', 'จำนวน (บาท)': profitSummary.netProfit > 0 ? 'กำไร' : 'ขาดทุน' },
     ];
 
@@ -162,12 +202,8 @@ export const ReportPage: React.FC = () => {
       'จำนวน (บาท/วัน)': cost.amount,
     }));
     costsData.push({
-      'รายการต้นทุน': 'ค่าพนักงาน',
+      'รายการต้นทุน': 'ค่าพนักงานเฉลี่ยต่อวัน',
       'จำนวน (บาท/วัน)': calculateEmployeeDailyCost(),
-    });
-    costsData.push({
-      'รายการต้นทุน': 'รวมทั้งหมด',
-      'จำนวน (บาท/วัน)': getTotalCustomCosts() + calculateEmployeeDailyCost(),
     });
 
     const wb = XLSX.utils.book_new();
@@ -178,12 +214,12 @@ export const ReportPage: React.FC = () => {
     const ws5 = XLSX.utils.json_to_sheet(employeeData);
     const ws6 = XLSX.utils.json_to_sheet(costsData);
 
-    XLSX.utils.book_append_sheet(wb, ws1, 'ยอดขายรายวัน');
+    XLSX.utils.book_append_sheet(wb, ws1, 'สรุปรายวัน');
     XLSX.utils.book_append_sheet(wb, ws2, 'สรุปกำไร-ขาดทุน');
     XLSX.utils.book_append_sheet(wb, ws3, 'สินค้าขายดี');
-    XLSX.utils.book_append_sheet(wb, ws4, 'แบ่งกำไรหุ้นส่วน');
-    XLSX.utils.book_append_sheet(wb, ws5, 'พนักงาน');
-    XLSX.utils.book_append_sheet(wb, ws6, 'รายการต้นทุน');
+    XLSX.utils.book_append_sheet(wb, ws4, 'แบ่งปันผลหุ้นส่วน');
+    XLSX.utils.book_append_sheet(wb, ws5, 'ข้อมูลพนักงาน');
+    XLSX.utils.book_append_sheet(wb, ws6, 'ต้นทุนคงที่');
 
     XLSX.writeFile(wb, `BizFlow-Report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
@@ -226,25 +262,25 @@ export const ReportPage: React.FC = () => {
         {/* Card 1: รายได้รวม */}
         <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
+              <TrendingUp className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-500 mb-0.5">รายได้รวม</p>
-              <h3 className="text-2xl font-black text-slate-800">฿{formatMoney(totalRevenue)}</h3>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">รายรับรวมทั้งหมด</p>
+              <h3 className="text-2xl font-black text-slate-800">฿{formatMoney(profitSummary.totalRevenue)}</h3>
             </div>
           </CardContent>
         </Card>
 
-        {/* Card 2: เฉลี่ยต่อวัน */}
+        {/* Card 2: รายจ่ายรวม (เปลี่ยนจากเฉลี่ยต่อวัน) */}
         <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
-              <CalendarIcon className="w-6 h-6 text-emerald-600" />
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center border border-rose-100">
+              <TrendingDown className="w-6 h-6 text-rose-600" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-500 mb-0.5">เฉลี่ยต่อวัน</p>
-              <h3 className="text-2xl font-black text-slate-800">฿{formatMoney(averageDaily)}</h3>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">รายจ่ายรวมทั้งหมด</p>
+              <h3 className="text-2xl font-black text-rose-600">฿{formatMoney(profitSummary.totalCosts)}</h3>
             </div>
           </CardContent>
         </Card>
@@ -252,12 +288,12 @@ export const ReportPage: React.FC = () => {
         {/* Card 3: กำไรสุทธิ */}
         <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
           <CardContent className="p-5 flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${profitSummary.netProfit >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-red-50 border-red-100'}`}>
-              <Wallet className={`w-6 h-6 ${profitSummary.netProfit >= 0 ? 'text-indigo-600' : 'text-red-600'}`} />
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${profitSummary.netProfit >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <Wallet className={`w-6 h-6 ${profitSummary.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-500 mb-0.5">กำไรสุทธิ</p>
-              <h3 className={`text-2xl font-black ${profitSummary.netProfit >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
+              <h3 className={`text-2xl font-black ${profitSummary.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {profitSummary.netProfit < 0 ? '-' : ''}฿{formatMoney(Math.abs(profitSummary.netProfit))}
               </h3>
             </div>
@@ -277,7 +313,7 @@ export const ReportPage: React.FC = () => {
                   <h3 className="text-lg font-bold text-slate-800 leading-tight">
                     {format(parseISO(topSalesDay.date), 'dd MMM yyyy', { locale: th })}
                   </h3>
-                  <p className="text-xs text-amber-600 font-medium mt-0.5">ยอด ฿{formatMoney(topSalesDay.sales)}</p>
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">ยอด ฿{formatMoney(topSalesDay.revenue)}</p>
                 </>
               ) : (
                 <h3 className="text-lg font-bold text-slate-400">ไม่มีข้อมูล</h3>
@@ -290,12 +326,12 @@ export const ReportPage: React.FC = () => {
       {/* ---------------- Charts Section ---------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* กราฟรายได้ (Recharts) */}
+        {/* กราฟเปรียบเทียบ รายรับ-รายจ่าย (แก้ไขเป็น 2 แท่ง) */}
         <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
           <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-6">
-              <TrendingUp className="w-5 h-5 text-indigo-500" />
-              <h3 className="text-lg font-bold text-slate-800">แนวโน้มรายได้</h3>
+              <BarChart3 className="w-5 h-5 text-indigo-500" />
+              <h3 className="text-lg font-bold text-slate-800">เปรียบเทียบรายรับ - รายจ่าย</h3>
             </div>
             
             {salesChartData.length > 0 ? (
@@ -308,7 +344,9 @@ export const ReportPage: React.FC = () => {
                     cursor={{ fill: '#f1f5f9' }}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Bar dataKey="sales" fill="#4f46e5" name="ยอดขาย (บาท)" radius={[6, 6, 0, 0]} barSize={40} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+                  <Bar dataKey="revenue" fill="#4f46e5" name="รายรับรวม (บาท)" radius={[4, 4, 0, 0]} barSize={15} />
+                  <Bar dataKey="expense" fill="#f43f5e" name="รายจ่ายรวม (บาท)" radius={[4, 4, 0, 0]} barSize={15} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -325,10 +363,10 @@ export const ReportPage: React.FC = () => {
           <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-6">
               <PieChartIcon className="w-5 h-5 text-emerald-500" />
-              <h3 className="text-lg font-bold text-slate-800">สัดส่วนการแบ่งกำไรหุ้นส่วน</h3>
+              <h3 className="text-lg font-bold text-slate-800">สัดส่วนการแบ่งปันผลหุ้นส่วน</h3>
             </div>
 
-            {profitSummary.partnerShares.length > 0 && profitSummary.netProfit > 0 ? (
+            {profitSummary.partnerShares.length > 0 && profitSummary.distributableProfit > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
