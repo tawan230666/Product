@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { MenuItem, DailySale } from '../types';
 import { Plus, Edit2, Trash2, ShoppingCart, CheckCircle, Settings as SettingsIcon, Minus, ImagePlus, ShoppingBag, Banknote, QrCode, Ticket } from 'lucide-react';
-import { Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Divider } from '@mui/material';
+import { Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, IconButton } from '@mui/material';
 import { format } from 'date-fns';
 
 type CheckoutStep = 'confirm' | 'success_cash' | 'success_scan' | null;
@@ -22,24 +22,14 @@ export const MenuPage: React.FC = () => {
   const [cart, setCart] = useState<{ [menuId: string]: number }>({});
   const [showManageMode, setShowManageMode] = useState(false);
   
-  // สถานะสำหรับระบบชำระเงินใหม่
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>(null);
   const [queueNumber, setQueueNumber] = useState<string>('');
   const [lastOrder, setLastOrder] = useState<{ menuId: string; name: string; emoji: string; count: number; total: number }[]>([]);
 
-  // ----------------------------------------------------
-  // ระบบการจัดการเมนู (CRUD)
-  // ----------------------------------------------------
   const handleOpenDialog = (item?: MenuItem) => {
     if (item) {
       setEditingItem(item);
-      setFormData({
-        name: item.name,
-        price: item.price,
-        description: item.description,
-        emoji: item.emoji,
-        image: item.image || '',
-      });
+      setFormData({ name: item.name, price: item.price, description: item.description, emoji: item.emoji, image: item.image || '' });
     } else {
       setEditingItem(null);
       setFormData({ name: '', price: 0, description: '', emoji: '🍔', image: '' });
@@ -48,11 +38,7 @@ export const MenuPage: React.FC = () => {
   };
 
   const handleSave = () => {
-    const item: MenuItem = {
-      id: editingItem?.id || Date.now().toString(),
-      ...formData,
-      image: formData.image || undefined,
-    };
+    const item: MenuItem = { id: editingItem?.id || Date.now().toString(), ...formData, image: formData.image || undefined };
     if (editingItem) updateMenuItem(editingItem.id, item);
     else addMenuItem(item);
     setDialogOpen(false);
@@ -67,9 +53,6 @@ export const MenuPage: React.FC = () => {
     }
   };
 
-  // ----------------------------------------------------
-  // ระบบตะกร้าสินค้า
-  // ----------------------------------------------------
   const addToCart = (menuId: string) => setCart({ ...cart, [menuId]: (cart[menuId] || 0) + 1 });
 
   const removeFromCart = (menuId: string) => {
@@ -83,97 +66,95 @@ export const MenuPage: React.FC = () => {
     }
   };
 
-  const getTotalPrice = () => {
-    return Object.entries(cart).reduce((total, [menuId, count]) => {
-      const item = menuItems.find((m) => m.id === menuId);
-      return total + (item?.price || 0) * count;
-    }, 0);
-  };
+  const getTotalPrice = () => Object.entries(cart).reduce((total, [menuId, count]) => {
+    const item = menuItems.find((m) => m.id === menuId);
+    return total + (item?.price || 0) * count;
+  }, 0);
 
   const getTotalItems = () => Object.values(cart).reduce((sum, count) => sum + count, 0);
 
-  // ----------------------------------------------------
-  // ระบบชำระเงิน (Checkout Flow)
-  // ----------------------------------------------------
-  
-  // 1. กดปุ่มชำระเงินหลัก (เปิดหน้ายืนยันคำสั่งซื้อ)
   const handleStartCheckout = () => {
-    const orderDetails = Object.entries(cart)
-      .map(([menuId, count]) => {
-        const item = menuItems.find((m) => m.id === menuId);
-        return item ? { menuId, name: item.name, emoji: item.emoji, count, total: item.price * count } : null;
-      })
-      .filter((item) => item !== null)
-      .sort((a, b) => b!.count - a!.count);
+    const orderDetails = Object.entries(cart).map(([menuId, count]) => {
+      const item = menuItems.find((m) => m.id === menuId);
+      return item ? { menuId, name: item.name, emoji: item.emoji, count, total: item.price * count } : null;
+    }).filter((item) => item !== null).sort((a, b) => b!.count - a!.count);
 
     setLastOrder(orderDetails as any);
-    
-    // สุ่มเลขคิว (ตัวอย่าง: A001 - A099)
     const randomQueue = `A${String(Math.floor(Math.random() * 99) + 1).padStart(3, '0')}`;
     setQueueNumber(randomQueue);
-
-    setCheckoutStep('confirm'); // ไปขั้นตอนยืนยันและเลือกวิธีจ่าย
+    setCheckoutStep('confirm');
   };
 
-  // 2. กดยืนยันวิธีชำระเงิน
-  const handleSelectPayment = (method: 'cash' | 'scan') => {
-    setCheckoutStep(method === 'cash' ? 'success_cash' : 'success_scan');
-  };
+  const handleSelectPayment = (method: 'cash' | 'scan') => setCheckoutStep(method === 'cash' ? 'success_cash' : 'success_scan');
 
-  // 3. กดเสร็จสิ้น (บันทึกยอดเข้าระบบบัญชี)
+  // ----------------------------------------------------------------------
+  // ✨ โค้ดส่วนนี้คือหัวใจหลักที่ได้รับการแก้ไขบั๊กทั้ง 2 จุดแล้วครับ
+  // ----------------------------------------------------------------------
   const handleFinalizePayment = () => {
     const today = format(new Date(), 'yyyy-MM-dd');
     const totalSales = getTotalPrice();
     const existingSale = dailySales.find((s) => s.date === today);
-    const newMenuSales = { ...(existingSale?.menuSales || {}), ...cart };
-
-    Object.entries(cart).forEach(([menuId, count]) => {
-      newMenuSales[menuId] = (newMenuSales[menuId] || 0) + count;
+    
+    // แก้ไข 1: ไม่เอาตะกร้าใหม่ไปทับยอดเก่า เพื่อให้บวกเพิ่มได้อย่างถูกต้อง
+    const newMenuSales = { ...(existingSale?.menuSales || {}) };
+    Object.entries(cart).forEach(([menuId, count]) => { 
+      newMenuSales[menuId] = (newMenuSales[menuId] || 0) + count; 
     });
 
-    const sale: DailySale = {
-      date: today,
-      sales: (existingSale?.sales || 0) + totalSales,
+    const sale: DailySale = { 
+      date: today, 
+      sales: (existingSale?.sales || 0) + totalSales, 
       menuSales: newMenuSales,
+      // แก้ไข 2: ดึงข้อมูลการเงินที่คุณคีย์ไว้ในหน้าบัญชีมาด้วย เพื่อไม่ให้หายไป
+      incomes: existingSale?.incomes || [],
+      expenses: existingSale?.expenses || [],
     };
 
     if (existingSale) updateDailySale(today, sale);
     else addDailySale(sale);
 
-    setCart({}); // ล้างตะกร้า
-    setCheckoutStep(null); // ปิดป๊อปอัป
+    setCart({});
+    setCheckoutStep(null);
   };
+  // ----------------------------------------------------------------------
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       {/* ---------------- Header Section ---------------- */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
-        <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
-          <span className="text-4xl">🛍️</span> 
-          {showManageMode ? 'จัดการเมนูสินค้า' : 'หน้าขาย (POS)'}
-        </h1>
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8 mt-2">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
+            {showManageMode ? 'จัดการแคตตาล็อกสินค้า' : 'ระบบขายหน้าร้าน (POS)'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {showManageMode ? 'เพิ่ม แก้ไข หรือลบรายการสินค้าในระบบของคุณ' : 'เลือกสินค้าเพื่อดำเนินการชำระเงิน'}
+          </p>
+        </div>
         <div className="flex gap-3">
           <Button
             variant={showManageMode ? 'contained' : 'outlined'}
-            startIcon={<SettingsIcon className="w-5 h-5" />}
+            startIcon={<SettingsIcon className="w-4 h-4" />}
             onClick={() => setShowManageMode(!showManageMode)}
             sx={{ 
-              borderRadius: '12px', 
+              borderRadius: '8px', 
               textTransform: 'none', 
               fontWeight: 600,
-              boxShadow: showManageMode ? '0 4px 14px 0 rgb(59 130 246 / 0.39)' : 'none'
+              color: showManageMode ? 'white' : '#475569',
+              borderColor: '#cbd5e1',
+              bgcolor: showManageMode ? '#475569' : 'transparent',
+              '&:hover': { bgcolor: showManageMode ? '#334155' : '#f8fafc', borderColor: '#94a3b8' }
             }}
           >
-            {showManageMode ? 'สลับไปโหมดขาย' : 'ตั้งค่าเมนู'}
+            {showManageMode ? 'สลับไปโหมดขาย' : 'จัดการสินค้า'}
           </Button>
           {showManageMode && (
             <Button 
               variant="contained" 
-              startIcon={<Plus className="w-5 h-5" />} 
+              startIcon={<Plus className="w-4 h-4" />} 
               onClick={() => handleOpenDialog()} 
-              sx={{ borderRadius: '12px', bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' }, textTransform: 'none', fontWeight: 600, boxShadow: '0 4px 14px 0 rgb(37 99 235 / 0.39)' }}
+              sx={{ borderRadius: '8px', bgcolor: '#4f46e5', '&:hover': { bgcolor: '#4338ca' }, textTransform: 'none', fontWeight: 600, boxShadow: 'none' }}
             >
-              เพิ่มเมนู
+              เพิ่มสินค้าใหม่
             </Button>
           )}
         </div>
@@ -181,53 +162,52 @@ export const MenuPage: React.FC = () => {
 
       {/* ---------------- Cart Summary Banner ---------------- */}
       {!showManageMode && (
-        <div className="mb-8 relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl shadow-xl shadow-indigo-200 border border-white/20">
-          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white/10 blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 rounded-full bg-blue-400/20 blur-2xl"></div>
+        <div className="mb-8 bg-slate-900 rounded-2xl shadow-lg border border-slate-800 overflow-hidden relative">
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
           
-          <div className="relative z-10 px-6 py-8 md:px-10 flex flex-col sm:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-6">
-              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/30">
-                <ShoppingBag className="w-8 h-8 text-white" />
+          <div className="relative z-10 px-6 py-6 md:px-8 flex flex-col sm:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-5 w-full sm:w-auto">
+              <div className="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center border border-slate-700">
+                <ShoppingBag className="w-6 h-6 text-indigo-400" />
               </div>
               <div>
-                <p className="text-blue-100 font-medium text-sm mb-1 uppercase tracking-wider">รายการในตะกร้า</p>
+                <p className="text-slate-400 font-medium text-xs tracking-widest uppercase mb-1">รายการสินค้าในตะกร้า</p>
                 <div className="flex items-baseline gap-2">
-                  <p className="text-4xl md:text-5xl font-black text-white">{getTotalItems()}</p>
-                  <p className="text-lg text-blue-100 font-medium">รายการ</p>
+                  <p className="text-3xl md:text-4xl font-bold text-white">{getTotalItems()}</p>
+                  <p className="text-sm text-slate-400 font-medium">รายการ</p>
                 </div>
               </div>
             </div>
 
-            <div className="hidden sm:block h-16 w-px bg-white/20"></div>
+            <div className="hidden sm:block h-12 w-px bg-slate-700"></div>
 
-            <div className="flex flex-col sm:items-end w-full sm:w-auto">
-              <p className="text-blue-100 font-medium text-sm mb-1 uppercase tracking-wider">ยอดรวมทั้งหมด</p>
-              <p className="text-4xl md:text-5xl font-black text-white tracking-tight">฿{getTotalPrice().toLocaleString()}</p>
+            <div className="flex flex-col sm:items-end w-full sm:w-auto flex-grow">
+              <p className="text-slate-400 font-medium text-xs tracking-widest uppercase mb-1">ยอดรวมสุทธิ</p>
+              <p className="text-3xl md:text-4xl font-bold text-emerald-400 tracking-tight">฿{getTotalPrice().toLocaleString()}</p>
             </div>
 
             <Button
               variant="contained"
               size="large"
-              startIcon={<CheckCircle className="w-6 h-6" />}
+              startIcon={<CheckCircle className="w-5 h-5" />}
               onClick={handleStartCheckout}
               disabled={getTotalItems() === 0}
               sx={{ 
-                bgcolor: 'white', 
-                color: '#4f46e5', 
-                fontWeight: 800,
-                fontSize: '1.1rem',
-                px: 5,
-                py: 2,
-                borderRadius: '16px',
+                bgcolor: '#4f46e5', 
+                color: 'white', 
+                fontWeight: 700,
+                fontSize: '1rem',
+                px: 4,
+                py: 1.5,
+                borderRadius: '10px',
                 whiteSpace: 'nowrap',
-                transition: 'all 0.2s',
-                '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-2px)', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)' },
-                '&.Mui-disabled': { bgcolor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.5)' }
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#4338ca' },
+                '&.Mui-disabled': { bgcolor: '#334155', color: '#64748b' }
               }}
-              className="w-full sm:w-auto mt-4 sm:mt-0"
+              className="w-full sm:w-auto mt-2 sm:mt-0"
             >
-              ชำระเงิน
+              ดำเนินการชำระเงิน
             </Button>
           </div>
         </div>
@@ -369,15 +349,8 @@ export const MenuPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ---------------- Dialog: Checkout Flow (ระบบชำระเงินใหม่) ---------------- */}
-      <Dialog 
-        open={checkoutStep !== null} 
-        onClose={() => checkoutStep === 'confirm' ? setCheckoutStep(null) : {}} // ป้องกันการกดปิดเองถ้าจ่ายแล้ว
-        maxWidth="sm" 
-        fullWidth 
-        PaperProps={{ sx: { borderRadius: '24px', overflow: 'hidden' }}}
-      >
-        {/* Step 1: เลือกวิธีชำระเงิน */}
+      {/* ---------------- Dialog: Checkout Flow ---------------- */}
+      <Dialog open={checkoutStep !== null} onClose={() => checkoutStep === 'confirm' ? setCheckoutStep(null) : {}} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '24px', overflow: 'hidden' }}}>
         {checkoutStep === 'confirm' && (
           <>
             <DialogTitle sx={{ pb: 2, pt: 3, px: 4, bgcolor: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
@@ -417,25 +390,11 @@ export const MenuPage: React.FC = () => {
                 
                 <p className="text-center text-sm font-bold text-slate-600 mb-3 border-t pt-4">เลือกวิธีชำระเงิน</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <Button 
-                    variant="outlined" 
-                    onClick={() => handleSelectPayment('cash')}
-                    sx={{ 
-                      flexDirection: 'column', py: 2, borderRadius: '16px', border: '2px solid #e2e8f0',
-                      color: '#475569', '&:hover': { borderColor: '#10b981', bgcolor: '#f0fdf4', color: '#059669' }
-                    }}
-                  >
+                  <Button variant="outlined" onClick={() => handleSelectPayment('cash')} sx={{ flexDirection: 'column', py: 2, borderRadius: '16px', border: '2px solid #e2e8f0', color: '#475569', '&:hover': { borderColor: '#10b981', bgcolor: '#f0fdf4', color: '#059669' }}}>
                     <Banknote className="w-8 h-8 mb-2" />
                     <span className="font-bold">เงินสด</span>
                   </Button>
-                  <Button 
-                    variant="outlined" 
-                    onClick={() => handleSelectPayment('scan')}
-                    sx={{ 
-                      flexDirection: 'column', py: 2, borderRadius: '16px', border: '2px solid #e2e8f0',
-                      color: '#475569', '&:hover': { borderColor: '#3b82f6', bgcolor: '#eff6ff', color: '#2563eb' }
-                    }}
-                  >
+                  <Button variant="outlined" onClick={() => handleSelectPayment('scan')} sx={{ flexDirection: 'column', py: 2, borderRadius: '16px', border: '2px solid #e2e8f0', color: '#475569', '&:hover': { borderColor: '#3b82f6', bgcolor: '#eff6ff', color: '#2563eb' }}}>
                     <QrCode className="w-8 h-8 mb-2" />
                     <span className="font-bold">สแกนจ่าย / โอน</span>
                   </Button>
@@ -450,7 +409,6 @@ export const MenuPage: React.FC = () => {
           </>
         )}
 
-        {/* Step 2 & 3: จ่ายเงินสำเร็จ (เงินสด หรือ สแกน) */}
         {(checkoutStep === 'success_cash' || checkoutStep === 'success_scan') && (
           <>
             <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 text-center text-white relative overflow-hidden">
@@ -463,7 +421,6 @@ export const MenuPage: React.FC = () => {
             </div>
             
             <DialogContent sx={{ p: 0, bgcolor: '#f8fafc' }}>
-              {/* ตั๋วคิว (Queue Ticket) */}
               <div className="px-6 pt-6 pb-2 text-center">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 inline-block min-w-[200px]">
                   <div className="flex items-center justify-center gap-2 text-slate-500 mb-1">
@@ -474,7 +431,6 @@ export const MenuPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* QR Code Placeholder (ถ้าเลือกสแกนจ่าย) */}
               {checkoutStep === 'success_scan' && (
                 <div className="px-6 py-4 flex flex-col items-center">
                   <div className="w-40 h-40 bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
@@ -501,17 +457,7 @@ export const MenuPage: React.FC = () => {
             </DialogContent>
             
             <DialogActions sx={{ px: 6, pb: 6, pt: 2, bgcolor: '#f8fafc' }}>
-              <Button 
-                onClick={handleFinalizePayment} 
-                variant="contained" 
-                fullWidth 
-                size="large" 
-                sx={{ 
-                  borderRadius: '16px', py: 1.5, fontSize: '1.1rem', fontWeight: 'bold', 
-                  bgcolor: '#059669', '&:hover': { bgcolor: '#047857' },
-                  boxShadow: '0 10px 15px -3px rgba(5, 150, 105, 0.3)' 
-                }}
-              >
+              <Button onClick={handleFinalizePayment} variant="contained" fullWidth size="large" sx={{ borderRadius: '16px', py: 1.5, fontSize: '1.1rem', fontWeight: 'bold', bgcolor: '#059669', '&:hover': { bgcolor: '#047857' }, boxShadow: '0 10px 15px -3px rgba(5, 150, 105, 0.3)' }}>
                 เสร็จสิ้นการสั่งซื้อ
               </Button>
             </DialogActions>

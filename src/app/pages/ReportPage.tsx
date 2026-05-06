@@ -2,12 +2,12 @@ import React, { useMemo } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { Button, Card, CardContent } from '@mui/material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Download, TrendingUp, Award, Calendar as CalendarIcon } from 'lucide-react';
+import { Download, TrendingUp, Award, Calendar as CalendarIcon, BarChart3, PieChart as PieChartIcon, Utensils, Wallet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4'];
 
 export const ReportPage: React.FC = () => {
   const { dailySales, menuItems, partners, employees, settings } = useBusiness();
@@ -146,8 +146,8 @@ export const ReportPage: React.FC = () => {
 
     const employeeData = employees.map((emp) => {
       const dailySalary = emp.paymentType === 'daily' ? emp.salary :
-                         emp.paymentType === 'monthly' ? emp.salary / 30 :
-                         emp.salary / 365;
+                          emp.paymentType === 'monthly' ? emp.salary / 30 :
+                          emp.salary / 365;
       return {
         'ชื่อพนักงาน': emp.name,
         'ตำแหน่ง': emp.position,
@@ -188,110 +188,146 @@ export const ReportPage: React.FC = () => {
     XLSX.writeFile(wb, `BizFlow-Report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
+  const formatMoney = (amount: number) => amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl">📊 สรุปรายงาน</h1>
-        <Button variant="contained" startIcon={<Download />} onClick={handleDownloadExcel}>
-          ดาวน์โหลด Excel
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      
+      {/* ---------------- Header ---------------- */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
+            <BarChart3 className="w-8 h-8 text-indigo-600" />
+            สรุปรายงาน (Dashboard)
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 pl-11">
+            วิเคราะห์ภาพรวมธุรกิจ ยอดขาย และผลประกอบการ
+          </p>
+        </div>
+        <Button 
+          variant="contained" 
+          startIcon={<Download className="w-4 h-4" />} 
+          onClick={handleDownloadExcel}
+          sx={{ 
+            borderRadius: '10px', 
+            bgcolor: '#0f172a', 
+            textTransform: 'none', 
+            fontWeight: 600, 
+            px: 3,
+            '&:hover': { bgcolor: '#334155' } 
+          }}
+        >
+          ดาวน์โหลด EXCEL
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">รายได้รวม</p>
-                <p className="text-2xl font-bold text-blue-600">฿{totalRevenue.toLocaleString()}</p>
-              </div>
+      {/* ---------------- KPI Cards ---------------- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: รายได้รวม */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100">
+              <TrendingUp className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">รายได้รวม</p>
+              <h3 className="text-2xl font-black text-slate-800">฿{formatMoney(totalRevenue)}</h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                <CalendarIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">เฉลี่ยต่อวัน</p>
-                <p className="text-2xl font-bold text-green-600">฿{averageDaily.toLocaleString()}</p>
-              </div>
+        {/* Card 2: เฉลี่ยต่อวัน */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
+              <CalendarIcon className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">เฉลี่ยต่อวัน</p>
+              <h3 className="text-2xl font-black text-slate-800">฿{formatMoney(averageDaily)}</h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Award className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">กำไรสุทธิ</p>
-                <p className={`text-2xl font-bold ${profitSummary.netProfit > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  ฿{profitSummary.netProfit.toLocaleString()}
-                </p>
-              </div>
+        {/* Card 3: กำไรสุทธิ */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${profitSummary.netProfit >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-red-50 border-red-100'}`}>
+              <Wallet className={`w-6 h-6 ${profitSummary.netProfit >= 0 ? 'text-indigo-600' : 'text-red-600'}`} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">กำไรสุทธิ</p>
+              <h3 className={`text-2xl font-black ${profitSummary.netProfit >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
+                {profitSummary.netProfit < 0 ? '-' : ''}฿{formatMoney(Math.abs(profitSummary.netProfit))}
+              </h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                <CalendarIcon className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">วันที่ขายดีสุด</p>
-                {topSalesDay ? (
-                  <>
-                    <p className="text-lg font-bold text-orange-600">
-                      {format(parseISO(topSalesDay.date), 'dd MMM', { locale: th })}
-                    </p>
-                    <p className="text-xs text-gray-500">฿{topSalesDay.sales.toLocaleString()}</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-400">ไม่มีข้อมูล</p>
-                )}
-              </div>
+        {/* Card 4: วันที่ขายดีสุด */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center border border-amber-100">
+              <Award className="w-6 h-6 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">วันที่ขายดีที่สุด</p>
+              {topSalesDay ? (
+                <>
+                  <h3 className="text-lg font-bold text-slate-800 leading-tight">
+                    {format(parseISO(topSalesDay.date), 'dd MMM yyyy', { locale: th })}
+                  </h3>
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">ยอด ฿{formatMoney(topSalesDay.sales)}</p>
+                </>
+              ) : (
+                <h3 className="text-lg font-bold text-slate-400">ไม่มีข้อมูล</h3>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <Card>
-          <CardContent>
-            <h2 className="text-xl mb-4">กราฟรายได้</h2>
+      {/* ---------------- Charts Section ---------------- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* กราฟรายได้ (Recharts) */}
+        <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <TrendingUp className="w-5 h-5 text-indigo-500" />
+              <h3 className="text-lg font-bold text-slate-800">แนวโน้มรายได้</h3>
+            </div>
+            
             {salesChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={salesChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="sales" fill="#3b82f6" name="ยอดขาย (บาท)" />
+                <BarChart data={salesChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip 
+                    cursor={{ fill: '#f1f5f9' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Bar dataKey="sales" fill="#4f46e5" name="ยอดขาย (บาท)" radius={[6, 6, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">
-                ยังไม่มีข้อมูลยอดขาย
+              <div className="h-[300px] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400">
+                <BarChart3 className="w-10 h-10 mb-3 text-slate-300" />
+                <p className="font-medium">ยังไม่มีข้อมูลยอดขาย</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <h2 className="text-xl mb-4">การแบ่งกำไรหุ้นส่วน</h2>
+        {/* การแบ่งกำไรหุ้นส่วน (Recharts PieChart) */}
+        <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <PieChartIcon className="w-5 h-5 text-emerald-500" />
+              <h3 className="text-lg font-bold text-slate-800">สัดส่วนการแบ่งกำไรหุ้นส่วน</h3>
+            </div>
+
             {profitSummary.partnerShares.length > 0 && profitSummary.netProfit > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
@@ -299,56 +335,75 @@ export const ReportPage: React.FC = () => {
                     data={profitSummary.partnerShares}
                     cx="50%"
                     cy="50%"
-                    labelLine={false}
-                    label={(entry) => `${entry.name} (${entry.percentage}%)`}
-                    outerRadius={80}
-                    fill="#8884d8"
+                    innerRadius={70}
+                    outerRadius={100}
+                    paddingAngle={5}
                     dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
                   >
                     {profitSummary.partnerShares.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => `฿${value.toLocaleString()}`} />
+                  <Tooltip 
+                    formatter={(value: number) => `฿${value.toLocaleString()}`} 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">
-                {partners.length === 0 ? 'ยังไม่มีหุ้นส่วน' : 'ไม่มีกำไรให้แบ่ง'}
+              <div className="h-[300px] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400">
+                <PieChartIcon className="w-10 h-10 mb-3 text-slate-300" />
+                <p className="font-medium">
+                  {partners.length === 0 ? 'ยังไม่มีรายชื่อหุ้นส่วนในระบบ' : 'ยังไม่มีกำไรให้ปันผลในขณะนี้'}
+                </p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardContent>
-          <h2 className="text-xl mb-4 flex items-center gap-2">
-            <Award className="w-6 h-6" />
-            เมนูขายดี TOP 5
-          </h2>
+      {/* ---------------- Top 5 Best Sellers ---------------- */}
+      <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+        <CardContent className="p-0">
+          <div className="p-6 border-b border-slate-100 flex items-center gap-2">
+            <Utensils className="w-5 h-5 text-rose-500" />
+            <h3 className="text-lg font-bold text-slate-800">เมนูขายดี TOP 5</h3>
+          </div>
+          
           {topMenuItems.length > 0 ? (
-            <div className="space-y-3">
+            <div className="divide-y divide-slate-50">
               {topMenuItems.map((item, index) => (
-                <div key={index} className="flex items-center gap-4 p-3 border rounded-lg">
-                  <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold">
-                    {index + 1}
-                  </div>
-                  <span className="text-3xl">{item.emoji}</span>
-                  <div className="flex-1">
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-sm text-gray-600">ขายไป {item.count} รายการ</p>
+                <div key={index} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg
+                      ${index === 0 ? 'bg-amber-100 text-amber-600' : 
+                        index === 1 ? 'bg-slate-200 text-slate-600' : 
+                        index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-400'}
+                    `}>
+                      {index + 1}
+                    </div>
+                    <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-2xl">
+                      {item.emoji}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-800 text-base">{item.name}</p>
+                      <p className="text-sm text-slate-500">ขายไปแล้ว {item.count} รายการ</p>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400">
-              ยังไม่มีข้อมูลการขาย
+            <div className="p-16 flex flex-col items-center justify-center text-slate-400">
+              <Award className="w-12 h-12 mb-4 text-slate-200" />
+              <p className="font-medium">ยังไม่มีข้อมูลการขายสินค้า</p>
             </div>
           )}
         </CardContent>
       </Card>
+      
     </div>
   );
 };

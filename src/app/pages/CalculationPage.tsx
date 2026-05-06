@@ -195,29 +195,28 @@ export const CalculationPage: React.FC = () => {
     let incomes: { name: string; amount: number }[] = [];
     let expenses: { name: string; amount: number }[] = [];
 
-    // 1. รวบรวมรายรับทั้งหมด
-    const revenueByMenu: { [key: string]: number } = {};
+    // 1. รวบรวมรายรับทั้งหมด (แก้ไขตรงนี้ให้ดึงยอดรวมตรงๆ)
+    let totalPosSales = 0;
+    
     dailySales.forEach((sale) => {
-      // รายได้จากการขายเมนู
-      Object.entries(sale.menuSales || {}).forEach(([menuId, count]) => {
-        const menu = menuItems.find((m) => m.id === menuId);
-        if (menu) {
-          revenueByMenu[menu.name] = (revenueByMenu[menu.name] || 0) + (menu.price * count);
-        }
-      });
+      // เอายอดขายสุทธิจาก POS มารวมเลย ไม่ต้องไล่คูณใหม่
+      totalPosSales += sale.sales;
+
       // รายรับอื่นๆ ที่พิมพ์เพิ่ม
       (sale.incomes || []).forEach(inc => {
         incomes.push({ name: `รายรับอื่นๆ - ${inc.name}`, amount: inc.amount });
       });
+      
       // รายจ่ายย่อยที่พิมพ์เพิ่ม
       (sale.expenses || []).forEach(exp => {
         expenses.push({ name: `รายจ่าย - ${exp.name}`, amount: exp.amount });
       });
     });
 
-    Object.entries(revenueByMenu).sort((a, b) => b[1] - a[1]).forEach(([name, amount]) => {
-      incomes.unshift({ name: `ยอดขาย - ${name}`, amount });
-    });
+    // ดันยอดขาย POS เข้าไปเป็นบรรทัดแรกของรายรับ
+    if (totalPosSales > 0) {
+      incomes.unshift({ name: `ยอดขายจากหน้าร้าน (POS)`, amount: totalPosSales });
+    }
 
     // 2. รวบรวมรายจ่ายคงที่
     let totalSalaries = 0;
