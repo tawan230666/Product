@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { Partner, DailySale, CustomCost, DailyEntry } from '../types';
 import { Button, TextField, Card, CardContent, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Chip, Tabs, Tab, Box, Divider } from '@mui/material';
-import { Calendar, Plus, Sparkles, Edit2, Trash2, Settings, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { Calendar, Plus, Sparkles, Edit2, Trash2, Settings, TrendingUp, TrendingDown, Wallet, Users, ImagePlus } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 export const CalculationPage: React.FC = () => {
-  const { partners, dailySales, settings, employees, menuItems, addPartner, updatePartner, deletePartner, addDailySale, updateDailySale, updateSettings } = useBusiness();
+  const { partners, dailySales, settings, employees, addPartner, updatePartner, deletePartner, addDailySale, updateDailySale, updateSettings } = useBusiness();
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState(0);
   const [partnerDialogOpen, setPartnerDialogOpen] = useState(false);
@@ -133,13 +133,13 @@ export const CalculationPage: React.FC = () => {
     const totalCosts = getTotalCustomCosts() + calculateEmployeeDailyCost() + dailyExpensesAmount;
     
     const grossProfit = totalSales - totalCosts;
-    const reinvestAmount = grossProfit * (settings.reinvestmentPercentage / 100);
-    const netProfit = grossProfit - reinvestAmount;
+    const reinvestAmount = grossProfit > 0 ? grossProfit * (settings.reinvestmentPercentage / 100) : 0;
+    const netProfit = grossProfit > 0 ? grossProfit - reinvestAmount : grossProfit;
 
     const partnerShares = partners.map((p) => ({
       name: p.name,
       percentage: p.percentage,
-      amount: netProfit * (p.percentage / 100),
+      amount: netProfit > 0 ? netProfit * (p.percentage / 100) : 0,
     }));
 
     setAiAnalysis({
@@ -195,25 +195,21 @@ export const CalculationPage: React.FC = () => {
     let incomes: { name: string; amount: number }[] = [];
     let expenses: { name: string; amount: number }[] = [];
 
-    // 1. รวบรวมรายรับทั้งหมด (แก้ไขตรงนี้ให้ดึงยอดรวมตรงๆ)
+    // 1. รวบรวมรายรับทั้งหมด
     let totalPosSales = 0;
     
     dailySales.forEach((sale) => {
-      // เอายอดขายสุทธิจาก POS มารวมเลย ไม่ต้องไล่คูณใหม่
       totalPosSales += sale.sales;
 
-      // รายรับอื่นๆ ที่พิมพ์เพิ่ม
       (sale.incomes || []).forEach(inc => {
         incomes.push({ name: `รายรับอื่นๆ - ${inc.name}`, amount: inc.amount });
       });
       
-      // รายจ่ายย่อยที่พิมพ์เพิ่ม
       (sale.expenses || []).forEach(exp => {
         expenses.push({ name: `รายจ่าย - ${exp.name}`, amount: exp.amount });
       });
     });
 
-    // ดันยอดขาย POS เข้าไปเป็นบรรทัดแรกของรายรับ
     if (totalPosSales > 0) {
       incomes.unshift({ name: `ยอดขายจากหน้าร้าน (POS)`, amount: totalPosSales });
     }
@@ -225,7 +221,7 @@ export const CalculationPage: React.FC = () => {
                    emp.paymentType === 'monthly' ? emp.salary / 30 : emp.salary / 365;
        totalSalaries += daily * activeDays;
     });
-    if (totalSalaries > 0) expenses.push({ name: 'ค่าจ้างพนักงาน', amount: totalSalaries });
+    if (totalSalaries > 0) expenses.push({ name: 'ต้นทุนคงที่ - ค่าพนักงาน', amount: totalSalaries });
 
     settings.customCosts.forEach(cost => {
       expenses.push({ name: `ต้นทุนคงที่ - ${cost.name}`, amount: cost.amount * activeDays });
@@ -243,30 +239,60 @@ export const CalculationPage: React.FC = () => {
   const formatMoney = (val: number) => val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-3xl font-bold text-gray-800">💰 การเงินและบัญชี</h1>
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 mt-2">
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
+          <span className="text-3xl">💰</span> การเงินและบัญชี
+        </h1>
         <div className="flex gap-2">
-          <Button variant="outlined" startIcon={<Settings />} onClick={() => { setSettingsForm(settings); setSettingsDialogOpen(true); }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<Settings className="w-4 h-4" />} 
+            onClick={() => { setSettingsForm(settings); setSettingsDialogOpen(true); }}
+            sx={{ 
+              borderRadius: '10px', 
+              textTransform: 'none', 
+              fontWeight: 600,
+              color: '#475569',
+              borderColor: '#cbd5e1',
+              '&:hover': { bgcolor: '#f8fafc', borderColor: '#94a3b8' }
+            }}
+          >
             ตั้งค่าต้นทุนคงที่
           </Button>
         </div>
       </div>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 4 }}>
-        <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-          <Tab label="บันทึกรายการ & วิเคราะห์หุ้นส่วน" sx={{ fontWeight: 'bold' }} />
-          <Tab label="งบกำไรขาดทุน (สรุปรายรับ-รายจ่าย)" sx={{ fontWeight: 'bold' }} />
+      <Box sx={{ borderBottom: 1, borderColor: '#e2e8f0', mb: 6 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          TabIndicatorProps={{ style: { backgroundColor: '#3b82f6', height: '3px', borderRadius: '3px' } }}
+          sx={{
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '1rem',
+              color: '#64748b',
+              '&.Mui-selected': { color: '#3b82f6' }
+            }
+          }}
+        >
+          <Tab label="บันทึกรายการ & วิเคราะห์หุ้นส่วน" />
+          <Tab label="งบกำไรขาดทุน (สรุปรายรับ-รายจ่าย)" />
         </Tabs>
       </Box>
 
-      {/* TAB 1: บันทึกรายการรายวัน */}
+      {/* ---------------------------------------------------- */}
+      {/* TAB 1: บันทึกรายการรายวัน & หุ้นส่วน */}
+      {/* ---------------------------------------------------- */}
       {activeTab === 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Card: บันทึกรายการประจำวัน */}
-          <Card className="shadow-sm border border-gray-100 rounded-2xl">
-            <CardContent className="p-6">
-              <h2 className="text-xl mb-6 flex items-center gap-2 font-bold text-gray-800">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* ส่วนบันทึกรายการ */}
+          <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+            <CardContent className="p-6 md:p-8">
+              <h2 className="text-xl mb-6 flex items-center gap-2 font-bold text-slate-800">
                 <Calendar className="w-6 h-6 text-blue-600" />
                 บันทึกรายการประจำวัน
               </h2>
@@ -284,145 +310,154 @@ export const CalculationPage: React.FC = () => {
               </div>
 
               {/* ยอดขายจาก POS */}
-              <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl mb-6 flex justify-between items-center">
+              <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl mb-6 flex justify-between items-center shadow-sm">
                 <div>
-                  <p className="text-sm font-semibold text-blue-800">ยอดขายจากหน้าร้าน (POS)</p>
-                  <p className="text-xs text-blue-600/70 mt-1">ระบบดึงข้อมูลให้อัตโนมัติ</p>
+                  <p className="text-sm font-bold text-blue-900">ยอดขายจากหน้าร้าน (POS)</p>
+                  <p className="text-[11px] text-blue-600/70 font-semibold mt-1">ระบบดึงข้อมูลให้อัตโนมัติ</p>
                 </div>
-                <p className="text-3xl font-bold text-blue-700">฿{currentSale?.sales?.toLocaleString() || 0}</p>
+                <p className="text-3xl font-black text-blue-700">฿{currentSale?.sales?.toLocaleString() || 0}</p>
               </div>
 
               {/* ส่วนเพิ่มรายรับ */}
               <div className="mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-bold text-green-700 flex items-center gap-2">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-emerald-700 flex items-center gap-2">
                     <TrendingUp className="w-5 h-5" /> รายรับอื่นๆ
                   </h3>
-                  <Button size="small" variant="outlined" color="success" startIcon={<Plus />} onClick={() => handleAddDailyEntry('income')} sx={{ borderRadius: '8px' }}>เพิ่มรายรับ</Button>
+                  <Button size="small" variant="outlined" color="success" startIcon={<Plus />} onClick={() => handleAddDailyEntry('income')} sx={{ borderRadius: '8px', fontWeight: 'bold' }}>เพิ่มรายรับ</Button>
                 </div>
                 <div className="space-y-3">
                   {dailyIncomes.map((inc) => (
-                    <div key={inc.id} className="flex gap-2 items-center bg-green-50/50 p-2 rounded-lg border border-green-100">
-                      <TextField fullWidth size="small" placeholder="เช่น ค่าทิป, ขายของเก่า" value={inc.name} onChange={(e) => handleUpdateDailyEntry('income', inc.id, 'name', e.target.value)} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white' } }} />
-                      <TextField fullWidth size="small" type="number" placeholder="จำนวนเงิน" value={inc.amount || ''} onChange={(e) => handleUpdateDailyEntry('income', inc.id, 'amount', Number(e.target.value))} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white' } }} />
-                      <IconButton color="error" onClick={() => handleRemoveDailyEntry('income', inc.id)}><Trash2 className="w-5 h-5" /></IconButton>
+                    <div key={inc.id} className="flex gap-2 items-center bg-emerald-50/50 p-2 rounded-xl border border-emerald-100">
+                      <TextField fullWidth size="small" placeholder="เช่น ค่าทิป, ขายของเก่า" value={inc.name} onChange={(e) => handleUpdateDailyEntry('income', inc.id, 'name', e.target.value)} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: '8px' } }} />
+                      <TextField fullWidth size="small" type="number" placeholder="จำนวนเงิน" value={inc.amount || ''} onChange={(e) => handleUpdateDailyEntry('income', inc.id, 'amount', Number(e.target.value))} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: '8px' } }} />
+                      <IconButton color="error" onClick={() => handleRemoveDailyEntry('income', inc.id)} sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#fee2e2' } }}><Trash2 className="w-4 h-4" /></IconButton>
                     </div>
                   ))}
-                  {dailyIncomes.length === 0 && <p className="text-sm text-gray-400 italic text-center py-2">ไม่มีรายรับอื่นๆ ในวันนี้</p>}
+                  {dailyIncomes.length === 0 && <p className="text-sm text-slate-400 font-medium text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">ไม่มีรายรับอื่นๆ ในวันนี้</p>}
                 </div>
               </div>
 
-              <Divider className="my-6 border-dashed" />
+              <Divider className="my-8" sx={{ borderStyle: 'dashed' }} />
 
               {/* ส่วนเพิ่มรายจ่าย */}
               <div className="mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-bold text-red-600 flex items-center gap-2">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-rose-600 flex items-center gap-2">
                     <TrendingDown className="w-5 h-5" /> รายจ่ายที่เกิดขึ้นวันนี้
                   </h3>
-                  <Button size="small" variant="outlined" color="error" startIcon={<Plus />} onClick={() => handleAddDailyEntry('expense')} sx={{ borderRadius: '8px' }}>เพิ่มรายจ่าย</Button>
+                  <Button size="small" variant="outlined" color="error" startIcon={<Plus />} onClick={() => handleAddDailyEntry('expense')} sx={{ borderRadius: '8px', fontWeight: 'bold' }}>เพิ่มรายจ่าย</Button>
                 </div>
                 <div className="space-y-3">
                   {dailyExpenses.map((exp) => (
-                    <div key={exp.id} className="flex gap-2 items-center bg-red-50/50 p-2 rounded-lg border border-red-100">
-                      <TextField fullWidth size="small" placeholder="เช่น ซื้อน้ำแข็ง, ค่าขนส่ง" value={exp.name} onChange={(e) => handleUpdateDailyEntry('expense', exp.id, 'name', e.target.value)} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white' } }} />
-                      <TextField fullWidth size="small" type="number" placeholder="จำนวนเงิน" value={exp.amount || ''} onChange={(e) => handleUpdateDailyEntry('expense', exp.id, 'amount', Number(e.target.value))} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white' } }} />
-                      <IconButton color="error" onClick={() => handleRemoveDailyEntry('expense', exp.id)}><Trash2 className="w-5 h-5" /></IconButton>
+                    <div key={exp.id} className="flex gap-2 items-center bg-rose-50/50 p-2 rounded-xl border border-rose-100">
+                      <TextField fullWidth size="small" placeholder="เช่น ซื้อน้ำแข็ง, ค่าขนส่ง" value={exp.name} onChange={(e) => handleUpdateDailyEntry('expense', exp.id, 'name', e.target.value)} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: '8px' } }} />
+                      <TextField fullWidth size="small" type="number" placeholder="จำนวนเงิน" value={exp.amount || ''} onChange={(e) => handleUpdateDailyEntry('expense', exp.id, 'amount', Number(e.target.value))} sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: '8px' } }} />
+                      <IconButton color="error" onClick={() => handleRemoveDailyEntry('expense', exp.id)} sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#fee2e2' } }}><Trash2 className="w-4 h-4" /></IconButton>
                     </div>
                   ))}
-                  {dailyExpenses.length === 0 && <p className="text-sm text-gray-400 italic text-center py-2">ไม่มีรายจ่ายเพิ่มเติมในวันนี้</p>}
+                  {dailyExpenses.length === 0 && <p className="text-sm text-slate-400 font-medium text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">ไม่มีรายจ่ายเพิ่มเติมในวันนี้</p>}
                 </div>
               </div>
 
-              <Button fullWidth variant="contained" size="large" onClick={handleSaveDailyData} sx={{ borderRadius: '10px', py: 1.5, fontWeight: 'bold' }}>
+              <Button fullWidth variant="contained" size="large" onClick={handleSaveDailyData} sx={{ borderRadius: '14px', py: 1.5, fontWeight: 'bold', fontSize: '1rem', bgcolor: '#2563eb', boxShadow: '0 8px 16px -4px rgba(37,99,235,0.3)', '&:hover': { bgcolor: '#1d4ed8' } }}>
                 บันทึกข้อมูลเข้าสู่ระบบบัญชี
               </Button>
             </CardContent>
           </Card>
 
-          {/* Card: วิเคราะห์หุ้นส่วน */}
-          <Card className="shadow-sm border border-gray-100 rounded-2xl h-fit">
-            <CardContent className="p-6">
+          {/* ส่วนหุ้นส่วนและการวิเคราะห์ */}
+          <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+            <CardContent className="p-6 md:p-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-800">👥 หุ้นส่วน</h2>
-                <Button size="small" variant="outlined" startIcon={<Plus />} onClick={() => handleAddPartner()} sx={{ borderRadius: '8px' }}>
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <Users className="w-6 h-6 text-purple-600" /> หุ้นส่วน
+                </h2>
+                <Button size="small" variant="outlined" startIcon={<Plus />} onClick={() => handleAddPartner()} sx={{ borderRadius: '8px', color: '#9333ea', borderColor: '#d8b4fe', '&:hover': { bgcolor: '#faf5ff', borderColor: '#a855f7' } }}>
                   เพิ่มหุ้นส่วน
                 </Button>
               </div>
 
               <div className="space-y-3">
                 {partners.map((partner) => (
-                  <div key={partner.id} className="flex items-center gap-4 p-4 border border-gray-100 rounded-xl bg-gray-50/50">
+                  <div key={partner.id} className="flex items-center gap-4 p-4 border border-slate-100 rounded-2xl bg-white shadow-sm hover:shadow-md transition-shadow">
                     {partner.image ? (
-                      <img src={partner.image} alt={partner.name} className="w-12 h-12 rounded-full object-cover shadow-sm" />
+                      <img src={partner.image} alt={partner.name} className="w-12 h-12 rounded-full object-cover shadow-sm border-2 border-white ring-1 ring-slate-100" />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                         {partner.name.charAt(0)}
                       </div>
                     )}
                     <div className="flex-1">
-                      <p className="font-bold text-gray-800">{partner.name}</p>
-                      <Chip label={`ส่วนแบ่ง ${partner.percentage}%`} size="small" color="primary" sx={{ mt: 0.5, fontWeight: 'medium' }} />
+                      <p className="font-bold text-slate-800">{partner.name}</p>
+                      <Chip label={`ส่วนแบ่ง ${partner.percentage}%`} size="small" sx={{ mt: 0.5, fontWeight: 'bold', bgcolor: '#f3e8ff', color: '#7e22ce' }} />
                     </div>
                     <div className="flex gap-1">
-                      <IconButton size="small" onClick={() => handleAddPartner(partner)}>
-                        <Edit2 className="w-4 h-4 text-gray-600" />
+                      <IconButton size="small" onClick={() => handleAddPartner(partner)} sx={{ bgcolor: '#f8fafc', '&:hover': { bgcolor: '#f1f5f9' } }}>
+                        <Edit2 className="w-4 h-4 text-slate-600" />
                       </IconButton>
-                      <IconButton size="small" color="error" onClick={() => deletePartner(partner.id)}>
-                        <Trash2 className="w-4 h-4" />
+                      <IconButton size="small" onClick={() => deletePartner(partner.id)} sx={{ bgcolor: '#fff1f2', '&:hover': { bgcolor: '#ffe4e6' } }}>
+                        <Trash2 className="w-4 h-4 text-rose-500" />
                       </IconButton>
                     </div>
                   </div>
                 ))}
-                {partners.length === 0 && <p className="text-center text-gray-400 py-4">ยังไม่มีข้อมูลหุ้นส่วน</p>}
+                {partners.length === 0 && <p className="text-center text-slate-400 font-medium py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">ยังไม่มีข้อมูลหุ้นส่วนในระบบ</p>}
               </div>
 
-              <Button fullWidth variant="contained" color="secondary" startIcon={<Sparkles />} onClick={handleAIAnalysis} sx={{ mt: 6, borderRadius: '10px', py: 1.5, fontWeight: 'bold' }}>
+              <Button 
+                fullWidth 
+                variant="contained" 
+                startIcon={<Sparkles />} 
+                onClick={handleAIAnalysis} 
+                sx={{ mt: 6, borderRadius: '14px', py: 1.5, fontWeight: 'bold', fontSize: '1rem', bgcolor: '#9333ea', boxShadow: '0 8px 16px -4px rgba(147,51,234,0.3)', '&:hover': { bgcolor: '#7e22ce' } }}
+              >
                 คำนวณกำไร / ขาดทุน ประจำวัน
               </Button>
 
               {aiAnalysis && (
-                <div className="mt-6 p-5 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl shadow-sm border border-purple-100">
-                  <h3 className="font-bold mb-4 flex items-center gap-2 text-indigo-900 text-lg">
-                    <Sparkles className="w-5 h-5 text-purple-600" />
+                <div className="mt-6 p-6 bg-slate-900 rounded-2xl shadow-lg relative overflow-hidden">
+                  <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-purple-500/20 blur-2xl"></div>
+                  
+                  <h3 className="font-bold mb-5 flex items-center gap-2 text-white text-lg relative z-10">
+                    <Sparkles className="w-5 h-5 text-purple-400" />
                     สรุปผลประกอบการวันนี้
                   </h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 font-medium">ยอดขาย + รายรับรวม:</span>
-                      <span className="font-bold text-base text-gray-800">฿{aiAnalysis.totalSales.toLocaleString()}</span>
+                  
+                  <div className="space-y-4 text-sm relative z-10">
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                      <span className="text-slate-400 font-medium">ยอดขาย + รายรับรวม:</span>
+                      <span className="font-bold text-base text-white">฿{aiAnalysis.totalSales.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 font-medium">ต้นทุน + รายจ่ายรวม:</span>
-                      <span className="font-bold text-base text-red-600">-฿{aiAnalysis.totalCosts.toLocaleString()}</span>
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                      <span className="text-slate-400 font-medium">ต้นทุน + รายจ่ายรวม:</span>
+                      <span className="font-bold text-base text-rose-400">-฿{aiAnalysis.totalCosts.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 font-medium">กำไรขั้นต้น:</span>
-                      <span className={`font-bold text-base ${aiAnalysis.grossProfit > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                      <span className="text-slate-400 font-medium">กำไรขั้นต้น:</span>
+                      <span className={`font-bold text-base ${aiAnalysis.grossProfit > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         ฿{aiAnalysis.grossProfit.toLocaleString()}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 font-medium">เก็บลงทุนต่อ ({settings.reinvestmentPercentage}%):</span>
-                      <span className="font-bold text-base text-orange-600">-฿{aiAnalysis.reinvestAmount.toLocaleString()}</span>
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                      <span className="text-slate-400 font-medium">เก็บลงทุนต่อ ({settings.reinvestmentPercentage}%):</span>
+                      <span className="font-bold text-base text-amber-400">-฿{aiAnalysis.reinvestAmount.toLocaleString()}</span>
                     </div>
                     
-                    <Divider sx={{ my: 2 }} />
-                    
-                    <div className="flex justify-between items-center">
-                      <span className="text-indigo-900 font-bold text-lg">กำไรสุทธิที่แบ่งได้:</span>
-                      <span className={`font-black text-2xl ${aiAnalysis.netProfit > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-white font-bold text-lg">กำไรสุทธิที่แบ่งได้:</span>
+                      <span className={`font-black text-2xl ${aiAnalysis.netProfit > 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
                         ฿{aiAnalysis.netProfit.toLocaleString()}
                       </span>
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-purple-200/60">
-                      <p className="font-bold text-indigo-900 mb-3">💰 ส่วนแบ่งหุ้นส่วน (ปันผล):</p>
+                    <div className="mt-4 pt-5 border-t border-slate-700 border-dashed">
+                      <p className="font-bold text-slate-300 mb-3 text-xs uppercase tracking-widest">💰 ส่วนแบ่งหุ้นส่วน (ปันผล)</p>
                       <div className="space-y-2">
                         {aiAnalysis.partnerShares.map((share: any, idx: number) => (
-                          <div key={idx} className="flex justify-between items-center bg-white/60 p-2 rounded-lg">
-                            <span className="font-medium text-gray-700">{share.name} ({share.percentage}%)</span>
-                            <span className="font-bold text-green-700">฿{share.amount.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
+                          <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl">
+                            <span className="font-medium text-slate-300">{share.name} <span className="text-slate-500 text-xs ml-1">({share.percentage}%)</span></span>
+                            <span className="font-bold text-emerald-400">฿{share.amount.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
                           </div>
                         ))}
                       </div>
@@ -435,105 +470,107 @@ export const CalculationPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: สรุปรายรับ-รายจ่าย (งบกำไรขาดทุน) Dashboard */}
+      {/* ---------------------------------------------------- */}
+      {/* TAB 2: งบกำไรขาดทุน */}
+      {/* ---------------------------------------------------- */}
       {activeTab === 1 && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           
-          {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-sm rounded-2xl">
+             <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
                <CardContent className="p-6">
                  <div className="flex items-center gap-3 mb-2">
-                   <div className="p-2 bg-green-200 rounded-lg text-green-700"><TrendingUp className="w-5 h-5" /></div>
-                   <p className="text-green-800 font-semibold">รายรับรวมทั้งหมด</p>
+                   <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600"><TrendingUp className="w-5 h-5" /></div>
+                   <p className="text-slate-500 font-bold uppercase tracking-wider text-xs">รายรับรวมทั้งหมด</p>
                  </div>
-                 <h3 className="text-3xl font-black text-green-700 mt-2">฿{formatMoney(incomeStatement.totalIncome)}</h3>
+                 <h3 className="text-3xl font-black text-slate-800 mt-3">฿{formatMoney(incomeStatement.totalIncome)}</h3>
                </CardContent>
              </Card>
-             <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 shadow-sm rounded-2xl">
+
+             <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
                <CardContent className="p-6">
                  <div className="flex items-center gap-3 mb-2">
-                   <div className="p-2 bg-red-200 rounded-lg text-red-700"><TrendingDown className="w-5 h-5" /></div>
-                   <p className="text-red-800 font-semibold">รายจ่ายรวมทั้งหมด</p>
+                   <div className="p-2 bg-rose-50 rounded-xl text-rose-600"><TrendingDown className="w-5 h-5" /></div>
+                   <p className="text-slate-500 font-bold uppercase tracking-wider text-xs">รายจ่ายรวมทั้งหมด</p>
                  </div>
-                 <h3 className="text-3xl font-black text-red-700 mt-2">฿{formatMoney(incomeStatement.totalExpense)}</h3>
+                 <h3 className="text-3xl font-black text-slate-800 mt-3">฿{formatMoney(incomeStatement.totalExpense)}</h3>
                </CardContent>
              </Card>
-             <Card className={`border shadow-sm rounded-2xl ${incomeStatement.netProfit >= 0 ? 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200' : 'bg-gradient-to-br from-orange-50 to-red-100 border-orange-200'}`}>
+
+             <Card sx={{ borderRadius: '20px', bgcolor: incomeStatement.netProfit >= 0 ? '#eff6ff' : '#fff1f2', border: `1px solid ${incomeStatement.netProfit >= 0 ? '#bfdbfe' : '#fecdd3'}`, boxShadow: 'none' }}>
                <CardContent className="p-6">
                  <div className="flex items-center gap-3 mb-2">
-                   <div className={`p-2 rounded-lg ${incomeStatement.netProfit >= 0 ? 'bg-blue-200 text-blue-700' : 'bg-orange-200 text-orange-700'}`}>
+                   <div className={`p-2 rounded-xl ${incomeStatement.netProfit >= 0 ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}`}>
                      <Wallet className="w-5 h-5" />
                    </div>
-                   <p className={`font-semibold ${incomeStatement.netProfit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>กำไรสุทธิ (เงินเข้ากระเป๋าเจ้าของ)</p>
+                   <p className={`font-bold uppercase tracking-wider text-xs ${incomeStatement.netProfit >= 0 ? 'text-blue-800' : 'text-rose-800'}`}>กำไรสุทธิ (เข้ากระเป๋าเจ้าของ)</p>
                  </div>
-                 <h3 className={`text-4xl font-black mt-2 ${incomeStatement.netProfit >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                 <h3 className={`text-4xl font-black mt-3 ${incomeStatement.netProfit >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
                    ฿{formatMoney(incomeStatement.netProfit)}
                  </h3>
                </CardContent>
              </Card>
           </div>
 
-          {/* Detailed Table */}
-          <Card className="shadow-md border border-gray-200 rounded-2xl overflow-hidden">
+          <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)', overflow: 'hidden' }}>
             <CardContent className="p-0">
-              <div className="bg-white px-6 py-5 border-b border-gray-100">
-                <h2 className="text-xl font-bold text-gray-800">รายละเอียด งบกำไรขาดทุน</h2>
-                <p className="text-sm text-gray-500 mt-1">สรุปข้อมูลการเงิน ณ วันที่ {format(new Date(), 'dd MMMM yyyy', { locale: th })}</p>
+              <div className="bg-white px-6 py-5 border-b border-slate-100">
+                <h2 className="text-xl font-bold text-slate-800">รายละเอียด งบกำไรขาดทุน</h2>
+                <p className="text-sm text-slate-500 mt-1">สรุปข้อมูลการเงิน ณ วันที่ {format(new Date(), 'dd MMMM yyyy', { locale: th })}</p>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-gray-50/80 text-gray-500 text-sm uppercase tracking-wider">
-                      <th className="px-6 py-4 font-semibold">รายการ (Description)</th>
-                      <th className="px-6 py-4 font-semibold text-right">รายรับ (Income)</th>
-                      <th className="px-6 py-4 font-semibold text-right">รายจ่าย (Expense)</th>
+                    <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-widest border-b border-slate-200">
+                      <th className="px-6 py-4 font-bold">รายการ (Description)</th>
+                      <th className="px-6 py-4 font-bold text-right">รายรับ (Income)</th>
+                      <th className="px-6 py-4 font-bold text-right">รายจ่าย (Expense)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-slate-100 text-sm">
                     
                     {/* หมวดรายรับ */}
-                    <tr className="bg-green-50/30">
-                      <td colSpan={3} className="px-6 py-3 font-bold text-green-800 text-sm">
+                    <tr className="bg-emerald-50/50">
+                      <td colSpan={3} className="px-6 py-3 font-bold text-emerald-800 text-xs uppercase tracking-widest">
                         <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4"/> หมวดรายรับ</div>
                       </td>
                     </tr>
                     {incomeStatement.incomes.length > 0 ? (
                       incomeStatement.incomes.map((item, idx) => (
-                        <tr key={`inc-${idx}`} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 pl-10 text-gray-700 font-medium">{item.name}</td>
-                          <td className="px-6 py-4 text-right text-green-600 font-bold">{formatMoney(item.amount)}</td>
-                          <td className="px-6 py-4 text-right text-gray-300">-</td>
+                        <tr key={`inc-${idx}`} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 pl-10 text-slate-700 font-medium">{item.name}</td>
+                          <td className="px-6 py-4 text-right text-emerald-600 font-bold">{formatMoney(item.amount)}</td>
+                          <td className="px-6 py-4 text-right text-slate-300">-</td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan={3} className="px-6 py-4 text-center text-gray-400 italic">ไม่มีข้อมูลรายรับ</td></tr>
+                      <tr><td colSpan={3} className="px-6 py-4 text-center text-slate-400 italic font-medium">ไม่มีข้อมูลรายรับ</td></tr>
                     )}
                     
                     {/* หมวดรายจ่าย */}
-                    <tr className="bg-red-50/30">
-                      <td colSpan={3} className="px-6 py-3 font-bold text-red-800 text-sm border-t-2 border-gray-100">
+                    <tr className="bg-rose-50/50">
+                      <td colSpan={3} className="px-6 py-3 font-bold text-rose-800 text-xs uppercase tracking-widest border-t-2 border-slate-100">
                         <div className="flex items-center gap-2"><TrendingDown className="w-4 h-4"/> หมวดรายจ่าย</div>
                       </td>
                     </tr>
                     {incomeStatement.expenses.length > 0 ? (
                       incomeStatement.expenses.map((item, idx) => (
-                        <tr key={`exp-${idx}`} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 pl-10 text-gray-700 font-medium">{item.name}</td>
-                          <td className="px-6 py-4 text-right text-gray-300">-</td>
-                          <td className="px-6 py-4 text-right text-red-500 font-bold">{formatMoney(item.amount)}</td>
+                        <tr key={`exp-${idx}`} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 pl-10 text-slate-700 font-medium">{item.name}</td>
+                          <td className="px-6 py-4 text-right text-slate-300">-</td>
+                          <td className="px-6 py-4 text-right text-rose-500 font-bold">{formatMoney(item.amount)}</td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan={3} className="px-6 py-4 text-center text-gray-400 italic">ไม่มีข้อมูลรายจ่าย</td></tr>
+                      <tr><td colSpan={3} className="px-6 py-4 text-center text-slate-400 italic font-medium">ไม่มีข้อมูลรายจ่าย</td></tr>
                     )}
                     
                     {/* สรุปยอดรวมด้านล่างตาราง */}
-                    <tr className="bg-gray-50">
-                      <td className="px-6 py-5 font-bold text-gray-800 text-right uppercase text-sm tracking-wider">รวมทั้งหมด</td>
-                      <td className="px-6 py-5 text-right font-black text-green-700 text-lg">{formatMoney(incomeStatement.totalIncome)}</td>
-                      <td className="px-6 py-5 text-right font-black text-red-600 text-lg">{formatMoney(incomeStatement.totalExpense)}</td>
+                    <tr className="bg-slate-900 text-white">
+                      <td className="px-6 py-5 font-bold text-right uppercase text-sm tracking-widest text-slate-400">รวมทั้งหมดสุทธิ</td>
+                      <td className="px-6 py-5 text-right font-black text-emerald-400 text-lg">{formatMoney(incomeStatement.totalIncome)}</td>
+                      <td className="px-6 py-5 text-right font-black text-rose-400 text-lg">{formatMoney(incomeStatement.totalExpense)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -543,70 +580,111 @@ export const CalculationPage: React.FC = () => {
         </div>
       )}
 
-      {/* Dialogs */}
-      <Dialog open={partnerDialogOpen} onClose={() => setPartnerDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ pb: 2, pt: 3, px: 4, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold' }}>
-          {editingPartner ? 'แก้ไขข้อมูลหุ้นส่วน' : 'เพิ่มหุ้นส่วนใหม่'}
-        </DialogTitle>
-        <DialogContent sx={{ px: 4, py: 3 }}>
-          <div className="space-y-5 mt-2">
-            <TextField fullWidth label="ชื่อหุ้นส่วน" value={partnerForm.name} onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
-            <TextField fullWidth type="number" label="เปอร์เซ็นต์ส่วนแบ่ง (%)" value={partnerForm.percentage} onChange={(e) => setPartnerForm({ ...partnerForm, percentage: Number(e.target.value) })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+      {/* ----------------------------------------------------- */}
+      {/* 🎨 Dialogs (Modern UI with Box spacing) */}
+      {/* ----------------------------------------------------- */}
+
+      {/* 1. หุ้นส่วน */}
+      <Dialog open={partnerDialogOpen} onClose={() => setPartnerDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '28px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)' }}}>
+        <DialogTitle sx={{ pb: 3, pt: 4, px: 4, bgcolor: '#ffffff', borderBottom: '1px solid #f8fafc' }}>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center"><Users className="w-6 h-6 text-purple-600" /></div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">รูปโปรไฟล์ (ตัวเลือก)</label>
-              <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-              {partnerForm.image && <img src={partnerForm.image} alt="Preview" className="mt-4 w-24 h-24 rounded-full object-cover shadow-md border border-gray-100" />}
+              <h2 className="text-xl font-bold text-slate-800 leading-none mb-1">{editingPartner ? 'แก้ไขข้อมูลหุ้นส่วน' : 'เพิ่มหุ้นส่วนใหม่'}</h2>
+              <p className="text-xs text-slate-400 font-medium">จัดการข้อมูลและสัดส่วนการแบ่งกำไร</p>
             </div>
           </div>
-        </DialogContent>
-        <DialogActions sx={{ px: 4, py: 3, bgcolor: '#ffffff', borderTop: '1px solid #f1f5f9' }}>
-          <Button onClick={() => setPartnerDialogOpen(false)} sx={{ fontWeight: 'bold', color: 'text.secondary' }}>ยกเลิก</Button>
-          <Button onClick={handleSavePartner} variant="contained" sx={{ borderRadius: '8px', fontWeight: 'bold', px: 4 }}>บันทึก</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ pb: 2, pt: 3, px: 4, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold' }}>ตั้งค่าต้นทุนคงที่ (Fixed Costs)</DialogTitle>
-        <DialogContent sx={{ px: 4, py: 3 }}>
-          <div className="space-y-4 mt-2">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold text-sm text-gray-500">รายการต้นทุนเหล่านี้จะถูกนำไปหักลบรายวันโดยอัตโนมัติ</h3>
-              <Button size="small" variant="outlined" startIcon={<Plus />} onClick={() => handleAddCost()} sx={{ borderRadius: '8px' }}>เพิ่มรายการ</Button>
-            </div>
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-              {settingsForm.customCosts.map((cost) => (
-                <div key={cost.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl bg-gray-50/50">
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-800">{cost.name}</p>
-                    <p className="text-sm text-red-600 font-medium">฿{cost.amount.toLocaleString()} / วัน</p>
+        </DialogTitle>
+        <DialogContent sx={{ px: 4, py: 3, bgcolor: '#ffffff' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
+            <TextField fullWidth label="ชื่อหุ้นส่วน" value={partnerForm.name} onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', bgcolor: '#f8fafc' } }} />
+            <TextField fullWidth label="เปอร์เซ็นต์ส่วนแบ่ง (%)" type="number" value={partnerForm.percentage || ''} onChange={(e) => setPartnerForm({ ...partnerForm, percentage: Number(e.target.value) })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', bgcolor: '#f8fafc' } }} />
+            <Box>
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">รูปโปรไฟล์ (ตัวเลือก)</label>
+              <div className="relative border-2 border-dashed border-slate-200 rounded-[24px] p-6 text-center hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer group bg-slate-50/50 overflow-hidden">
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                {partnerForm.image ? (
+                  <div className="relative flex justify-center">
+                    <img src={partnerForm.image} alt="Preview" className="w-24 h-24 object-cover rounded-full shadow-lg border-4 border-white" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-full"><Edit2 className="w-5 h-5 text-white" /></div>
                   </div>
-                  <IconButton size="small" onClick={() => handleAddCost(cost)} sx={{ bgcolor: 'white', shadow: 'sm' }}><Edit2 className="w-4 h-4 text-blue-600" /></IconButton>
-                  <IconButton size="small" color="error" onClick={() => handleDeleteCost(cost.id)} sx={{ bgcolor: 'white', shadow: 'sm' }}><Trash2 className="w-4 h-4" /></IconButton>
-                </div>
-              ))}
-              {settingsForm.customCosts.length === 0 && <p className="text-center text-gray-400 py-4 text-sm">ยังไม่มีการตั้งค่าต้นทุนคงที่</p>}
-            </div>
-            <Divider className="my-5 border-dashed"/>
-            <TextField fullWidth type="number" label="เปอร์เซ็นต์หักเก็บไว้ลงทุนต่อ (%)" value={settingsForm.reinvestmentPercentage} onChange={(e) => setSettingsForm({ ...settingsForm, reinvestmentPercentage: Number(e.target.value) })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} helperText="รายได้สุทธิส่วนนี้จะไม่ถูกนำไปปันผลให้หุ้นส่วน" />
-          </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 bg-white shadow-sm border border-slate-100 text-purple-500 rounded-2xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><ImagePlus className="w-5 h-5" /></div>
+                    <p className="text-sm font-bold text-slate-700">คลิกเพื่อเลือกรูปภาพ</p>
+                    <p className="text-[10px] text-slate-400 mt-1">ขนาดแนะนำ 1:1 (PNG, JPG)</p>
+                  </div>
+                )}
+              </div>
+            </Box>
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 4, py: 3, bgcolor: '#ffffff', borderTop: '1px solid #f1f5f9' }}>
-          <Button onClick={() => setSettingsDialogOpen(false)} sx={{ fontWeight: 'bold', color: 'text.secondary' }}>ยกเลิก</Button>
-          <Button onClick={handleSaveSettings} variant="contained" sx={{ borderRadius: '8px', fontWeight: 'bold', px: 4 }}>บันทึกตั้งค่า</Button>
+        <DialogActions sx={{ px: 4, py: 4, bgcolor: '#ffffff', borderTop: '1px solid #f8fafc' }}>
+          <Button onClick={() => setPartnerDialogOpen(false)} sx={{ color: 'text.secondary', fontWeight: 'bold', px: 3, textTransform: 'none' }}>ยกเลิก</Button>
+          <Button onClick={handleSavePartner} variant="contained" disabled={!partnerForm.name || partnerForm.percentage <= 0} sx={{ borderRadius: '14px', px: 5, py: 1.2, fontWeight: 'bold', textTransform: 'none', bgcolor: '#9333ea', boxShadow: '0 8px 20px -6px rgba(147, 51, 234, 0.5)', '&:hover': { bgcolor: '#7e22ce' }, '&.Mui-disabled': { bgcolor: '#e2e8f0', color: '#94a3b8' }}}>บันทึกข้อมูล</Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={costDialogOpen} onClose={() => setCostDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ pb: 2, pt: 3, px: 4, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold' }}>{editingCost ? 'แก้ไขรายการ' : 'เพิ่มรายการต้นทุนคงที่'}</DialogTitle>
-        <DialogContent sx={{ px: 4, py: 3 }}>
-          <div className="space-y-5 mt-2">
-            <TextField fullWidth label="ชื่อรายการ" value={costForm.name} onChange={(e) => setCostForm({ ...costForm, name: e.target.value })} placeholder="เช่น ค่าเช่าที่, ค่าไฟ" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
-            <TextField fullWidth type="number" label="จำนวนเงิน (เฉลี่ยตกวันละกี่บาท)" value={costForm.amount || ''} onChange={(e) => setCostForm({ ...costForm, amount: Number(e.target.value) })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} InputProps={{ startAdornment: <span className="text-gray-400 font-bold mr-2">฿</span> }} />
+      {/* 2. ตั้งค่าต้นทุนหลัก */}
+      <Dialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '28px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)' }}}>
+        <DialogTitle sx={{ pb: 3, pt: 4, px: 4, bgcolor: '#ffffff', borderBottom: '1px solid #f8fafc' }}>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center"><Settings className="w-6 h-6 text-slate-600" /></div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800 leading-none mb-1">ตั้งค่าต้นทุนคงที่</h2>
+              <p className="text-xs text-slate-400 font-medium">รายการเหล่านี้จะถูกหักจากรายรับอัตโนมัติทุกวัน</p>
+            </div>
           </div>
+        </DialogTitle>
+        <DialogContent sx={{ px: 4, py: 3, bgcolor: '#ffffff' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
+            
+            <div className="bg-slate-50 border border-slate-200 rounded-[20px] p-4">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
+                <h3 className="font-bold text-sm text-slate-700">รายการต้นทุนรายวัน</h3>
+                <Button size="small" variant="contained" startIcon={<Plus className="w-4 h-4"/>} onClick={() => handleAddCost()} sx={{ borderRadius: '10px', textTransform: 'none', bgcolor: '#334155', boxShadow: 'none', '&:hover': { bgcolor: '#0f172a' }}}>เพิ่มรายการ</Button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                {settingsForm.customCosts.map((cost) => (
+                  <div key={cost.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
+                    <div>
+                      <p className="font-bold text-slate-800 text-sm">{cost.name}</p>
+                      <p className="text-xs text-rose-500 font-bold mt-0.5">฿{cost.amount.toLocaleString()} / วัน</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <IconButton size="small" onClick={() => handleAddCost(cost)} sx={{ bgcolor: '#f8fafc' }}><Edit2 className="w-4 h-4 text-slate-600" /></IconButton>
+                      <IconButton size="small" onClick={() => handleDeleteCost(cost.id)} sx={{ bgcolor: '#fff1f2' }}><Trash2 className="w-4 h-4 text-rose-500" /></IconButton>
+                    </div>
+                  </div>
+                ))}
+                {settingsForm.customCosts.length === 0 && <p className="text-center text-slate-400 py-4 text-sm font-medium">ยังไม่มีการตั้งค่าต้นทุนคงที่</p>}
+              </div>
+            </div>
+
+            <TextField fullWidth type="number" label="เปอร์เซ็นต์หักเก็บไว้ลงทุนต่อ (%)" value={settingsForm.reinvestmentPercentage} onChange={(e) => setSettingsForm({ ...settingsForm, reinvestmentPercentage: Number(e.target.value) })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', bgcolor: '#f8fafc' } }} helperText="รายได้สุทธิส่วนนี้จะไม่ถูกนำไปปันผลให้หุ้นส่วน" />
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 4, py: 3, bgcolor: '#ffffff', borderTop: '1px solid #f1f5f9' }}>
-          <Button onClick={() => setCostDialogOpen(false)} sx={{ fontWeight: 'bold', color: 'text.secondary' }}>ยกเลิก</Button>
-          <Button onClick={handleSaveCost} variant="contained" disabled={!costForm.name || costForm.amount <= 0} sx={{ borderRadius: '8px', fontWeight: 'bold', px: 4 }}>บันทึก</Button>
+        <DialogActions sx={{ px: 4, py: 4, bgcolor: '#ffffff', borderTop: '1px solid #f8fafc' }}>
+          <Button onClick={() => setSettingsDialogOpen(false)} sx={{ color: 'text.secondary', fontWeight: 'bold', px: 3, textTransform: 'none' }}>ยกเลิก</Button>
+          <Button onClick={handleSaveSettings} variant="contained" sx={{ borderRadius: '14px', px: 5, py: 1.2, fontWeight: 'bold', textTransform: 'none', bgcolor: '#334155', boxShadow: '0 8px 20px -6px rgba(15, 23, 42, 0.5)', '&:hover': { bgcolor: '#0f172a' }}}>บันทึกการตั้งค่า</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 3. เพิ่ม/แก้ไข รายการต้นทุน */}
+      <Dialog open={costDialogOpen} onClose={() => setCostDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)' }}}>
+        <DialogTitle sx={{ pb: 3, pt: 4, px: 4, bgcolor: '#ffffff', borderBottom: '1px solid #f8fafc' }}>
+          <h2 className="text-xl font-bold text-slate-800 leading-none mb-1">{editingCost ? 'แก้ไขรายการ' : 'เพิ่มรายการต้นทุน'}</h2>
+          <p className="text-xs text-slate-400 font-medium">ระบุต้นทุนที่ต้องจ่ายคงที่ในทุกๆ วัน</p>
+        </DialogTitle>
+        <DialogContent sx={{ px: 4, py: 3, bgcolor: '#ffffff' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
+            <TextField fullWidth label="ชื่อรายการ" value={costForm.name} onChange={(e) => setCostForm({ ...costForm, name: e.target.value })} placeholder="เช่น ค่าเช่าที่, ค่าไฟ" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', bgcolor: '#f8fafc' } }} />
+            <TextField fullWidth type="number" label="จำนวนเงิน (บาท/วัน)" value={costForm.amount || ''} onChange={(e) => setCostForm({ ...costForm, amount: Number(e.target.value) })} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', bgcolor: '#f8fafc' } }} InputProps={{ startAdornment: <span className="text-slate-400 font-bold mr-2 text-sm">฿</span> }} />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 4, py: 4, bgcolor: '#ffffff', borderTop: '1px solid #f8fafc' }}>
+          <Button onClick={() => setCostDialogOpen(false)} sx={{ color: 'text.secondary', fontWeight: 'bold', px: 3, textTransform: 'none' }}>ยกเลิก</Button>
+          <Button onClick={handleSaveCost} variant="contained" disabled={!costForm.name || costForm.amount <= 0} sx={{ borderRadius: '14px', px: 5, py: 1.2, fontWeight: 'bold', textTransform: 'none', bgcolor: '#334155', boxShadow: '0 8px 20px -6px rgba(15, 23, 42, 0.5)', '&:hover': { bgcolor: '#0f172a' }, '&.Mui-disabled': { bgcolor: '#e2e8f0', color: '#94a3b8' }}}>บันทึก</Button>
         </DialogActions>
       </Dialog>
     </div>

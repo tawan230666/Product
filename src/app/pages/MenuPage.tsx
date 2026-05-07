@@ -87,15 +87,11 @@ export const MenuPage: React.FC = () => {
 
   const handleSelectPayment = (method: 'cash' | 'scan') => setCheckoutStep(method === 'cash' ? 'success_cash' : 'success_scan');
 
-  // ----------------------------------------------------------------------
-  // ✨ โค้ดส่วนนี้คือหัวใจหลักที่ได้รับการแก้ไขบั๊กทั้ง 2 จุดแล้วครับ
-  // ----------------------------------------------------------------------
   const handleFinalizePayment = () => {
     const today = format(new Date(), 'yyyy-MM-dd');
     const totalSales = getTotalPrice();
     const existingSale = dailySales.find((s) => s.date === today);
     
-    // แก้ไข 1: ไม่เอาตะกร้าใหม่ไปทับยอดเก่า เพื่อให้บวกเพิ่มได้อย่างถูกต้อง
     const newMenuSales = { ...(existingSale?.menuSales || {}) };
     Object.entries(cart).forEach(([menuId, count]) => { 
       newMenuSales[menuId] = (newMenuSales[menuId] || 0) + count; 
@@ -105,7 +101,6 @@ export const MenuPage: React.FC = () => {
       date: today, 
       sales: (existingSale?.sales || 0) + totalSales, 
       menuSales: newMenuSales,
-      // แก้ไข 2: ดึงข้อมูลการเงินที่คุณคีย์ไว้ในหน้าบัญชีมาด้วย เพื่อไม่ให้หายไป
       incomes: existingSale?.incomes || [],
       expenses: existingSale?.expenses || [],
     };
@@ -116,7 +111,6 @@ export const MenuPage: React.FC = () => {
     setCart({});
     setCheckoutStep(null);
   };
-  // ----------------------------------------------------------------------
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -431,11 +425,26 @@ export const MenuPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* โซนแสดงรูปภาพ QR Code สแกนจ่าย */}
               {checkoutStep === 'success_scan' && (
                 <div className="px-6 py-4 flex flex-col items-center">
-                  <div className="w-40 h-40 bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
-                    <QrCode className="w-24 h-24 text-slate-800" />
-                    <p className="text-xs font-bold text-slate-500 mt-2">สแกนเพื่อชำระเงิน</p>
+                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+                    
+                    {/* เปลี่ยนมาใช้แท็ก img เพื่อดึงรูปภาพจากโฟลเดอร์ public */}
+                    <img 
+                      src="/promptpay.png"  /* <--- นำไฟล์รูปของคุณใส่ในโฟลเดอร์ public/promptpay.png */
+                      alt="QR Code สำหรับรับเงิน" 
+                      className="w-48 h-48 object-contain rounded-lg"
+                      onError={(e) => {
+                        // โค้ดส่วนนี้จะทำงานถ้าระบบหารูป promptpay.png ไม่เจอ (แสดงรูปสำรองแทน)
+                        e.currentTarget.src = "https://placehold.co/300x300/f8fafc/94a3b8?text=QR+Code"; 
+                      }}
+                    />
+                    
+                    <p className="text-sm font-bold text-slate-700 mt-3">สแกนเพื่อชำระเงิน</p>
+                    <p className="text-xs font-medium text-slate-500 mt-1">
+                      ยอดชำระ: <span className="font-bold text-indigo-600">฿{lastOrder.reduce((sum, item) => sum + item.total, 0).toLocaleString()}</span>
+                    </p>
                   </div>
                 </div>
               )}
