@@ -2,25 +2,100 @@ import React, { useMemo } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { Button, Card, CardContent } from '@mui/material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Download, TrendingUp, Award, Calendar as CalendarIcon } from 'lucide-react';
+import { Download, TrendingUp, TrendingDown, Award, BarChart3, PieChart as PieChartIcon, Utensils, Wallet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4'];
 
 export const ReportPage: React.FC = () => {
   const { dailySales, menuItems, partners, employees, settings } = useBusiness();
 
+  const calculateEmployeeDailyCost = () => {
+    return employees.reduce((total, emp) => {
+      if (emp.paymentType === 'daily') return total + emp.salary;
+      if (emp.paymentType === 'monthly') return total + emp.salary / 30;
+      if (emp.paymentType === 'yearly') return total + emp.salary / 365;
+      return total;
+    }, 0);
+  };
+
+  const getTotalCustomCosts = () => {
+    return settings.customCosts.reduce((sum, cost) => sum + cost.amount, 0);
+  };
+
+  // 1. คำนวณสรุปผลกำไร
+  const profitSummary = useMemo(() => {
+    let totalPosSales = 0;
+    let totalOtherIncomes = 0;
+    let totalDailyExpenses = 0;
+
+    dailySales.forEach((sale) => {
+      totalPosSales += sale.sales || 0;
+      totalOtherIncomes += (sale.incomes || []).reduce((sum, inc) => sum + inc.amount, 0);
+      totalDailyExpenses += (sale.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+    });
+
+    const totalRevenue = totalPosSales + totalOtherIncomes;
+    
+    const activeDays = dailySales.length > 0 ? dailySales.length : 1;
+    const fixedCosts = (getTotalCustomCosts() + calculateEmployeeDailyCost()) * activeDays;
+    const totalCosts = fixedCosts + totalDailyExpenses;
+
+    const netProfit = totalRevenue - totalCosts; 
+    const reinvestAmount = netProfit > 0 ? netProfit * (settings.reinvestmentPercentage / 100) : 0;
+    const distributableProfit = netProfit > 0 ? netProfit - reinvestAmount : 0;
+
+    const partnerShares = partners.map((p) => ({
+      name: p.name,
+      value: distributableProfit * (p.percentage / 100),
+      percentage: p.percentage,
+    }));
+
+    return {
+      totalRevenue,
+      totalCosts,
+      netProfit,
+      reinvestAmount,
+      distributableProfit,
+      partnerShares,
+    };
+  }, [dailySales, settings, partners, employees]);
+
+  // 2. ข้อมูลกราฟเปรียบเทียบ รายรับ-รายจ่าย (แก้ไขเพิ่มรายจ่ายลงกราฟ)
   const salesChartData = useMemo(() => {
+    const dailyFixedCost = getTotalCustomCosts() + calculateEmployeeDailyCost();
+
     return dailySales
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((sale) => ({
-        date: format(parseISO(sale.date), 'dd MMM', { locale: th }),
-        sales: sale.sales,
-      }));
+      .map((sale) => {
+        const dailyRevenue = sale.sales + (sale.incomes || []).reduce((sum, inc) => sum + inc.amount, 0);
+        const dailyOtherExpense = (sale.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+        const dailyTotalExpense = dailyFixedCost + dailyOtherExpense;
+
+        return {
+          date: format(parseISO(sale.date), 'dd MMM', { locale: th }),
+          revenue: dailyRevenue,
+          expense: dailyTotalExpense,
+        };
+      });
+  }, [dailySales, settings.customCosts, employees]);
+
+  // 3. หาวันที่ขายดีที่สุด
+  const topSalesDay = useMemo(() => {
+    if (dailySales.length === 0) return null;
+    let bestDay = { date: '', revenue: 0 };
+    dailySales.forEach(sale => {
+      const rev = sale.sales + (sale.incomes || []).reduce((sum, i) => sum + i.amount, 0);
+      if (rev > bestDay.revenue) {
+        bestDay = { date: sale.date, revenue: rev };
+      }
+    });
+    return bestDay.date ? bestDay : null;
   }, [dailySales]);
 
+  // 4. เมนูขายดี
   const topMenuItems = useMemo(() => {
     const menuSalesCount: { [menuId: string]: number } = {};
     dailySales.forEach((sale) => {
@@ -42,75 +117,40 @@ export const ReportPage: React.FC = () => {
       .slice(0, 5);
   }, [dailySales, menuItems]);
 
-  const topSalesDay = useMemo(() => {
-    if (dailySales.length === 0) return null;
-    return dailySales.reduce((max, sale) => (sale.sales > max.sales ? sale : max));
-  }, [dailySales]);
-
-  const totalRevenue = dailySales.reduce((sum, sale) => sum + sale.sales, 0);
-  const averageDaily = dailySales.length > 0 ? totalRevenue / dailySales.length : 0;
-
-  const calculateEmployeeDailyCost = () => {
-    return employees.reduce((total, emp) => {
-      if (emp.paymentType === 'daily') return total + emp.salary;
-      if (emp.paymentType === 'monthly') return total + emp.salary / 30;
-      if (emp.paymentType === 'yearly') return total + emp.salary / 365;
-      return total;
-    }, 0);
-  };
-
-  const getTotalCustomCosts = () => {
-    return settings.customCosts.reduce((sum, cost) => sum + cost.amount, 0);
-  };
-
-  const profitSummary = useMemo(() => {
-    const totalSales = dailySales.reduce((sum, sale) => sum + sale.sales, 0);
-    const dailyCosts = getTotalCustomCosts() + calculateEmployeeDailyCost();
-    const totalCosts = dailyCosts * dailySales.length;
-    const grossProfit = totalSales - totalCosts;
-    const reinvestAmount = grossProfit * (settings.reinvestmentPercentage / 100);
-    const netProfit = grossProfit - reinvestAmount;
-
-    const partnerShares = partners.map((p) => ({
-      name: p.name,
-      value: netProfit * (p.percentage / 100),
-      percentage: p.percentage,
-    }));
-
-    return {
-      totalSales,
-      totalCosts,
-      grossProfit,
-      reinvestAmount,
-      netProfit,
-      partnerShares,
-    };
-  }, [dailySales, settings, partners, employees]);
-
   const handleDownloadExcel = () => {
     const salesDetailData = dailySales.map((sale) => {
-      const dailyCost = getTotalCustomCosts() + calculateEmployeeDailyCost();
-      const profit = sale.sales - dailyCost;
-      const reinvest = profit * (settings.reinvestmentPercentage / 100);
-      const netProfit = profit - reinvest;
+      const dailyOtherIncome = (sale.incomes || []).reduce((sum, inc) => sum + inc.amount, 0);
+      const dailyOtherExpense = (sale.expenses || []).reduce((sum, exp) => sum + exp.amount, 0);
+      const dailyRevenue = sale.sales + dailyOtherIncome;
+      
+      const dailyFixedCost = getTotalCustomCosts() + calculateEmployeeDailyCost();
+      const dailyTotalCost = dailyFixedCost + dailyOtherExpense;
+      
+      const profit = dailyRevenue - dailyTotalCost;
+      const reinvest = profit > 0 ? profit * (settings.reinvestmentPercentage / 100) : 0;
+      const netProfitForDividend = profit > 0 ? profit - reinvest : 0;
 
       return {
         'วันที่': format(parseISO(sale.date), 'dd/MM/yyyy', { locale: th }),
-        'ยอดขาย (บาท)': sale.sales,
-        'ต้นทุน (บาท)': dailyCost,
-        'กำไรขั้นต้น (บาท)': profit,
+        'ยอดขายหน้าร้าน (บาท)': sale.sales,
+        'รายรับอื่นๆ (บาท)': dailyOtherIncome,
+        'รายรับรวม (บาท)': dailyRevenue,
+        'รายจ่ายอื่นๆ (บาท)': dailyOtherExpense,
+        'ต้นทุนคงที่ (บาท)': dailyFixedCost,
+        'รวมรายจ่าย (บาท)': dailyTotalCost,
+        'กำไรสุทธิ (บาท)': profit,
         'เก็บลงทุนต่อ (บาท)': reinvest,
-        'กำไรสุทธิ (บาท)': netProfit,
-        'สถานะ': netProfit > 0 ? 'กำไร' : netProfit < 0 ? 'ขาดทุน' : 'เท่าทุน',
+        'ปันผลหุ้นส่วน (บาท)': netProfitForDividend,
+        'สถานะ': profit > 0 ? 'กำไร' : profit < 0 ? 'ขาดทุน' : 'เท่าทุน',
       };
     });
 
     const summaryData = [
-      { 'รายการ': 'ยอดขายรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalSales },
-      { 'รายการ': 'ต้นทุนรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalCosts },
-      { 'รายการ': 'กำไรขั้นต้น', 'จำนวน (บาท)': profitSummary.grossProfit },
-      { 'รายการ': `เก็บลงทุนต่อ (${settings.reinvestmentPercentage}%)`, 'จำนวน (บาท)': profitSummary.reinvestAmount },
+      { 'รายการ': 'รายรับรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalRevenue },
+      { 'รายการ': 'รายจ่ายรวมทั้งหมด', 'จำนวน (บาท)': profitSummary.totalCosts },
       { 'รายการ': 'กำไรสุทธิ', 'จำนวน (บาท)': profitSummary.netProfit },
+      { 'รายการ': `เก็บลงทุนต่อ (${settings.reinvestmentPercentage}%)`, 'จำนวน (บาท)': profitSummary.reinvestAmount },
+      { 'รายการ': 'ยอดแบ่งปันผลหุ้นส่วน', 'จำนวน (บาท)': profitSummary.distributableProfit },
       { 'รายการ': 'สถานะ', 'จำนวน (บาท)': profitSummary.netProfit > 0 ? 'กำไร' : 'ขาดทุน' },
     ];
 
@@ -146,8 +186,8 @@ export const ReportPage: React.FC = () => {
 
     const employeeData = employees.map((emp) => {
       const dailySalary = emp.paymentType === 'daily' ? emp.salary :
-                         emp.paymentType === 'monthly' ? emp.salary / 30 :
-                         emp.salary / 365;
+                          emp.paymentType === 'monthly' ? emp.salary / 30 :
+                          emp.salary / 365;
       return {
         'ชื่อพนักงาน': emp.name,
         'ตำแหน่ง': emp.position,
@@ -162,12 +202,8 @@ export const ReportPage: React.FC = () => {
       'จำนวน (บาท/วัน)': cost.amount,
     }));
     costsData.push({
-      'รายการต้นทุน': 'ค่าพนักงาน',
+      'รายการต้นทุน': 'ค่าพนักงานเฉลี่ยต่อวัน',
       'จำนวน (บาท/วัน)': calculateEmployeeDailyCost(),
-    });
-    costsData.push({
-      'รายการต้นทุน': 'รวมทั้งหมด',
-      'จำนวน (บาท/วัน)': getTotalCustomCosts() + calculateEmployeeDailyCost(),
     });
 
     const wb = XLSX.utils.book_new();
@@ -178,177 +214,234 @@ export const ReportPage: React.FC = () => {
     const ws5 = XLSX.utils.json_to_sheet(employeeData);
     const ws6 = XLSX.utils.json_to_sheet(costsData);
 
-    XLSX.utils.book_append_sheet(wb, ws1, 'ยอดขายรายวัน');
+    XLSX.utils.book_append_sheet(wb, ws1, 'สรุปรายวัน');
     XLSX.utils.book_append_sheet(wb, ws2, 'สรุปกำไร-ขาดทุน');
     XLSX.utils.book_append_sheet(wb, ws3, 'สินค้าขายดี');
-    XLSX.utils.book_append_sheet(wb, ws4, 'แบ่งกำไรหุ้นส่วน');
-    XLSX.utils.book_append_sheet(wb, ws5, 'พนักงาน');
-    XLSX.utils.book_append_sheet(wb, ws6, 'รายการต้นทุน');
+    XLSX.utils.book_append_sheet(wb, ws4, 'แบ่งปันผลหุ้นส่วน');
+    XLSX.utils.book_append_sheet(wb, ws5, 'ข้อมูลพนักงาน');
+    XLSX.utils.book_append_sheet(wb, ws6, 'ต้นทุนคงที่');
 
     XLSX.writeFile(wb, `BizFlow-Report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
+  const formatMoney = (amount: number) => amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl">📊 สรุปรายงาน</h1>
-        <Button variant="contained" startIcon={<Download />} onClick={handleDownloadExcel}>
-          ดาวน์โหลด Excel
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      
+      {/* ---------------- Header ---------------- */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
+            <BarChart3 className="w-8 h-8 text-indigo-600" />
+            สรุปรายงาน (Dashboard)
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 pl-11">
+            วิเคราะห์ภาพรวมธุรกิจ ยอดขาย และผลประกอบการ
+          </p>
+        </div>
+        <Button 
+          variant="contained" 
+          startIcon={<Download className="w-4 h-4" />} 
+          onClick={handleDownloadExcel}
+          sx={{ 
+            borderRadius: '10px', 
+            bgcolor: '#0f172a', 
+            textTransform: 'none', 
+            fontWeight: 600, 
+            px: 3,
+            '&:hover': { bgcolor: '#334155' } 
+          }}
+        >
+          ดาวน์โหลด EXCEL
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">รายได้รวม</p>
-                <p className="text-2xl font-bold text-blue-600">฿{totalRevenue.toLocaleString()}</p>
-              </div>
+      {/* ---------------- KPI Cards ---------------- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: รายได้รวม */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
+              <TrendingUp className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">รายรับรวมทั้งหมด</p>
+              <h3 className="text-2xl font-black text-slate-800">฿{formatMoney(profitSummary.totalRevenue)}</h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                <CalendarIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">เฉลี่ยต่อวัน</p>
-                <p className="text-2xl font-bold text-green-600">฿{averageDaily.toLocaleString()}</p>
-              </div>
+        {/* Card 2: รายจ่ายรวม (เปลี่ยนจากเฉลี่ยต่อวัน) */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center border border-rose-100">
+              <TrendingDown className="w-6 h-6 text-rose-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">รายจ่ายรวมทั้งหมด</p>
+              <h3 className="text-2xl font-black text-rose-600">฿{formatMoney(profitSummary.totalCosts)}</h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Award className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">กำไรสุทธิ</p>
-                <p className={`text-2xl font-bold ${profitSummary.netProfit > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  ฿{profitSummary.netProfit.toLocaleString()}
-                </p>
-              </div>
+        {/* Card 3: กำไรสุทธิ */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${profitSummary.netProfit >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <Wallet className={`w-6 h-6 ${profitSummary.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">กำไรสุทธิ</p>
+              <h3 className={`text-2xl font-black ${profitSummary.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {profitSummary.netProfit < 0 ? '-' : ''}฿{formatMoney(Math.abs(profitSummary.netProfit))}
+              </h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                <CalendarIcon className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">วันที่ขายดีสุด</p>
-                {topSalesDay ? (
-                  <>
-                    <p className="text-lg font-bold text-orange-600">
-                      {format(parseISO(topSalesDay.date), 'dd MMM', { locale: th })}
-                    </p>
-                    <p className="text-xs text-gray-500">฿{topSalesDay.sales.toLocaleString()}</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-400">ไม่มีข้อมูล</p>
-                )}
-              </div>
+        {/* Card 4: วันที่ขายดีสุด */}
+        <Card sx={{ borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)' }}>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center border border-amber-100">
+              <Award className="w-6 h-6 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-500 mb-0.5">วันที่ขายดีที่สุด</p>
+              {topSalesDay ? (
+                <>
+                  <h3 className="text-lg font-bold text-slate-800 leading-tight">
+                    {format(parseISO(topSalesDay.date), 'dd MMM yyyy', { locale: th })}
+                  </h3>
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">ยอด ฿{formatMoney(topSalesDay.revenue)}</p>
+                </>
+              ) : (
+                <h3 className="text-lg font-bold text-slate-400">ไม่มีข้อมูล</h3>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <Card>
-          <CardContent>
-            <h2 className="text-xl mb-4">กราฟรายได้</h2>
+      {/* ---------------- Charts Section ---------------- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* กราฟเปรียบเทียบ รายรับ-รายจ่าย (แก้ไขเป็น 2 แท่ง) */}
+        <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <BarChart3 className="w-5 h-5 text-indigo-500" />
+              <h3 className="text-lg font-bold text-slate-800">เปรียบเทียบรายรับ - รายจ่าย</h3>
+            </div>
+            
             {salesChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={salesChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="sales" fill="#3b82f6" name="ยอดขาย (บาท)" />
+                <BarChart data={salesChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip 
+                    cursor={{ fill: '#f1f5f9' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+                  <Bar dataKey="revenue" fill="#4f46e5" name="รายรับรวม (บาท)" radius={[4, 4, 0, 0]} barSize={15} />
+                  <Bar dataKey="expense" fill="#f43f5e" name="รายจ่ายรวม (บาท)" radius={[4, 4, 0, 0]} barSize={15} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">
-                ยังไม่มีข้อมูลยอดขาย
+              <div className="h-[300px] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400">
+                <BarChart3 className="w-10 h-10 mb-3 text-slate-300" />
+                <p className="font-medium">ยังไม่มีข้อมูลยอดขาย</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent>
-            <h2 className="text-xl mb-4">การแบ่งกำไรหุ้นส่วน</h2>
-            {profitSummary.partnerShares.length > 0 && profitSummary.netProfit > 0 ? (
+        {/* การแบ่งกำไรหุ้นส่วน (Recharts PieChart) */}
+        <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <PieChartIcon className="w-5 h-5 text-emerald-500" />
+              <h3 className="text-lg font-bold text-slate-800">สัดส่วนการแบ่งปันผลหุ้นส่วน</h3>
+            </div>
+
+            {profitSummary.partnerShares.length > 0 && profitSummary.distributableProfit > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
                     data={profitSummary.partnerShares}
                     cx="50%"
                     cy="50%"
-                    labelLine={false}
-                    label={(entry) => `${entry.name} (${entry.percentage}%)`}
-                    outerRadius={80}
-                    fill="#8884d8"
+                    innerRadius={70}
+                    outerRadius={100}
+                    paddingAngle={5}
                     dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
                   >
                     {profitSummary.partnerShares.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => `฿${value.toLocaleString()}`} />
+                  <Tooltip 
+                    formatter={(value: number) => `฿${value.toLocaleString()}`} 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">
-                {partners.length === 0 ? 'ยังไม่มีหุ้นส่วน' : 'ไม่มีกำไรให้แบ่ง'}
+              <div className="h-[300px] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400">
+                <PieChartIcon className="w-10 h-10 mb-3 text-slate-300" />
+                <p className="font-medium">
+                  {partners.length === 0 ? 'ยังไม่มีรายชื่อหุ้นส่วนในระบบ' : 'ยังไม่มีกำไรให้ปันผลในขณะนี้'}
+                </p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardContent>
-          <h2 className="text-xl mb-4 flex items-center gap-2">
-            <Award className="w-6 h-6" />
-            เมนูขายดี TOP 5
-          </h2>
+      {/* ---------------- Top 5 Best Sellers ---------------- */}
+      <Card sx={{ borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+        <CardContent className="p-0">
+          <div className="p-6 border-b border-slate-100 flex items-center gap-2">
+            <Utensils className="w-5 h-5 text-rose-500" />
+            <h3 className="text-lg font-bold text-slate-800">เมนูขายดี TOP 5</h3>
+          </div>
+          
           {topMenuItems.length > 0 ? (
-            <div className="space-y-3">
+            <div className="divide-y divide-slate-50">
               {topMenuItems.map((item, index) => (
-                <div key={index} className="flex items-center gap-4 p-3 border rounded-lg">
-                  <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold">
-                    {index + 1}
-                  </div>
-                  <span className="text-3xl">{item.emoji}</span>
-                  <div className="flex-1">
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-sm text-gray-600">ขายไป {item.count} รายการ</p>
+                <div key={index} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg
+                      ${index === 0 ? 'bg-amber-100 text-amber-600' : 
+                        index === 1 ? 'bg-slate-200 text-slate-600' : 
+                        index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-400'}
+                    `}>
+                      {index + 1}
+                    </div>
+                    <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-2xl">
+                      {item.emoji}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-800 text-base">{item.name}</p>
+                      <p className="text-sm text-slate-500">ขายไปแล้ว {item.count} รายการ</p>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400">
-              ยังไม่มีข้อมูลการขาย
+            <div className="p-16 flex flex-col items-center justify-center text-slate-400">
+              <Award className="w-12 h-12 mb-4 text-slate-200" />
+              <p className="font-medium">ยังไม่มีข้อมูลการขายสินค้า</p>
             </div>
           )}
         </CardContent>
       </Card>
+      
     </div>
   );
 };
