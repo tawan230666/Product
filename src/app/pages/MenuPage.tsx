@@ -111,7 +111,8 @@ export const MenuPage: React.FC = () => {
     setLastOrder(orderDetails as any);
 
     const existingSale = dailySales.find((s) => s.date === today);
-    const newMenuSales = { ...(existingSale?.menuSales || {}), ...cart };
+    // Start from today's existing counts, then add this order once.
+    const newMenuSales = { ...(existingSale?.menuSales || {}) };
 
     Object.entries(cart).forEach(([menuId, count]) => {
       newMenuSales[menuId] = (newMenuSales[menuId] || 0) + count;

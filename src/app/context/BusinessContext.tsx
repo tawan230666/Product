@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { usePersistentState } from '../hooks/usePersistentState';
 import { MenuItem, Partner, DailySale, Employee, BusinessSettings } from '../types';
 
 interface BusinessContextType {
@@ -24,11 +25,19 @@ interface BusinessContextType {
 const BusinessContext = createContext<BusinessContextType | undefined>(undefined);
 
 export const BusinessProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [dailySales, setDailySales] = useState<DailySale[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [settings, setSettings] = useState<BusinessSettings>({
+  // Demo menu shown on the first visit; afterwards everything comes from localStorage.
+  const demoMenu: MenuItem[] = [
+    { id: 'demo-1', name: 'ชาเย็น', price: 45, description: 'ชาไทยเย็น หวานมัน', emoji: '🧋' },
+    { id: 'demo-2', name: 'กาแฟเย็น', price: 50, description: 'กาแฟสดคั่วเข้ม', emoji: '☕' },
+    { id: 'demo-3', name: 'ขนมปังปิ้ง', price: 35, description: 'ขนมปังปิ้งเนยนม', emoji: '🍞' },
+    { id: 'demo-4', name: 'ข้าวกะเพรา', price: 60, description: 'ข้าวกะเพราหมูสับไข่ดาว', emoji: '🍛' },
+  ];
+
+  const [menuItems, setMenuItems] = usePersistentState<MenuItem[]>('menuItems', demoMenu);
+  const [partners, setPartners] = usePersistentState<Partner[]>('partners', []);
+  const [dailySales, setDailySales] = usePersistentState<DailySale[]>('dailySales', []);
+  const [employees, setEmployees] = usePersistentState<Employee[]>('employees', []);
+  const [settings, setSettings] = usePersistentState<BusinessSettings>('settings', {
     customCosts: [
       { id: '1', name: 'ค่าน้ำ', amount: 0 },
       { id: '2', name: 'ค่าน้ำมัน', amount: 0 },
